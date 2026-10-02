@@ -27,7 +27,7 @@ const ensureAgent = (name: string, agent: Record<string, unknown>): IRNode => ({
   ],
 });
 
-const RAW: Omit<Template, "program">[] & { program: unknown }[] = [
+const RAW: (Omit<Template, "program"> & { program: unknown })[] = [
   {
     id: "living-crew",
     name: "Living Crew",
@@ -192,7 +192,7 @@ const RAW: Omit<Template, "program">[] & { program: unknown }[] = [
 export const TEMPLATES: Template[] = RAW.map((t) => {
   const parsed = parseProgram(t.program);
   if (!parsed.ok) throw new Error(`Template "${t.id}" is invalid:\n${formatIssues(parsed.issues)}`);
-  return { ...t, program: parsed.program } as Template;
+  return { ...t, program: parsed.program };
 });
 
 export const getTemplate = (id: string) => TEMPLATES.find((t) => t.id === id);
