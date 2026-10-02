@@ -30,11 +30,11 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
   const soon = () => notify("info", "Running and debugging arrive with the runtime in Phase 3.");
 
   return (
-    <header className="relative z-30 grid h-[52px] shrink-0 grid-cols-[1fr_minmax(0,520px)_1fr] items-center gap-4 border-b border-[#1d1f23] bg-ink px-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="relative z-30 flex h-[52px] shrink-0 items-center gap-4 border-b border-[#1d1f23] bg-ink px-4">
+      <div className="flex min-w-[150px] flex-1 basis-0 items-center gap-3">
         <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="CIRCUIT home">
           <LogoMark />
-          <span className="hidden font-mono text-[13px] font-semibold tracking-[0.18em] lg:inline">CIRCUIT</span>
+          <span className="hidden font-mono text-[13px] font-semibold tracking-[0.18em] xl:inline">CIRCUIT</span>
         </Link>
         <span className="h-4 w-px shrink-0 bg-line-2" />
         <ProjectMenu />
@@ -43,9 +43,11 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
         </span>
       </div>
 
-      <AiBar />
+      <div className="w-[520px] min-w-[220px] shrink">
+        <AiBar />
+      </div>
 
-      <div className="flex min-w-0 items-center justify-end gap-2">
+      <div className="flex flex-1 basis-0 items-center justify-end gap-2">
         <UndoRedo />
         <SaveIndicator />
         <button

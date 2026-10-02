@@ -31,7 +31,7 @@ export function SaveIndicator() {
       </span>
     );
   return (
-    <span className="hidden items-center gap-1 font-mono text-[11px] tracking-[0.06em] text-dim lg:flex" aria-live="polite">
+    <span className="hidden items-center gap-1 font-mono text-[11px] tracking-[0.06em] text-dim xl:flex" aria-live="polite">
       {status === "saving" ? "SAVING…" : (
         <>
           <CheckIcon width={11} height={11} /> SAVED

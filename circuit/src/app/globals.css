@@ -140,3 +140,15 @@ body {
   font-size: 12.5px !important;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.5) !important;
 }
+
+/* ---- Blocks ---- */
+.circuit-renderer .blocklyText,
+.circuit-renderer .blocklyNonEditableField > text {
+  fill: var(--color-fg);
+}
+.circuit-renderer .blocklyPath {
+  stroke-width: 1px;
+}
+.circuitBlockTag {
+  pointer-events: none;
+}
