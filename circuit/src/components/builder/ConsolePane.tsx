@@ -63,7 +63,11 @@ function ConsoleLog({ state }: { state: RuntimeState }) {
   const end = useRef<HTMLDivElement>(null);
   const runs = state.runs.slice(-15);
   const lastLen = runs.length ? runs[runs.length - 1].entries.length : 0;
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [runs.length, lastLen]);
+  // Braces matter: newer browsers return a Promise from scrollIntoView, and an
+  // effect may only return a cleanup function.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [runs.length, lastLen]);
 
   if (!runs.length)
     return (
