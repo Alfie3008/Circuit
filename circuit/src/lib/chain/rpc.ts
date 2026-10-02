@@ -181,7 +181,9 @@ export async function history(opts: { mint: string; hours: number; max: number }
       if ((s.blockTime ?? 0) < cutoff) return { events: await eventsFor(sigs, opts.mint, undefined, f), cursor: sigs[0]?.signature ?? null, scanned: sigs.length, truncated };
       sigs.push(s);
     }
-    before = page[page.length - 1].signature;
+    const last = page[page.length - 1].signature;
+    if (last === before) break; // a misbehaving RPC repeating a page: stop rather than loop
+    before = last;
   }
   truncated = sigs.length >= opts.max;
   return { events: await eventsFor(sigs, opts.mint, undefined, f), cursor: sigs[0]?.signature ?? null, scanned: sigs.length, truncated };

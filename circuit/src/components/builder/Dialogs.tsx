@@ -9,6 +9,7 @@ import type { ProjectSetup } from "@/lib/project/storage";
 import { TEMPLATES } from "@/lib/templates";
 import { hueColour } from "@/lib/ui/colour";
 import { useProjectStore } from "@/store/project";
+import { BacktestDialog } from "./BacktestDialog";
 
 function Modal({ title, onClose, children, width = 760 }: { title: string; onClose: () => void; children: React.ReactNode; width?: number }) {
   useEffect(() => {
@@ -190,5 +191,6 @@ export function Dialogs() {
   const dialog = useProjectStore((s) => s.dialog);
   if (dialog === "templates") return <TemplatePicker />;
   if (dialog === "setup") return <SetupDialog />;
+  if (dialog === "backtest") return <BacktestDialog />;
   return null;
 }

@@ -85,6 +85,16 @@ export function RunButton() {
               <span className="truncate">{s.label}</span>
             </button>
           ))}
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              useProjectStore.getState().openDialog("backtest");
+            }}
+            className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-line px-2.5 py-2 text-left text-[13px] text-fg-2 hover:bg-white/5 hover:text-fg"
+          >
+            Backtest: if this had been running…
+          </button>
           <p className="border-t border-line px-2.5 pb-1 pt-2 text-[11.5px] leading-snug text-dim">
             Events are simulated. Money never moves: finance blocks run against a simulated treasury.
           </p>
