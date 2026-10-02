@@ -21,6 +21,8 @@ function LogoMark() {
   );
 }
 
+const MODE_LABEL = { prototype: "PROTOTYPE", existing: "EXISTING TOKEN", launch: "LAUNCH PREVIEW" } as const;
+
 const ghostBtn =
   "inline-flex h-[30px] items-center gap-2 whitespace-nowrap rounded-md border border-line-2 bg-panel px-3 font-mono text-xs tracking-[0.04em] text-fg-2 transition-colors hover:bg-raised hover:text-fg disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -28,6 +30,8 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
   const blocks = useProjectStore((s) => s.stats.blocks);
   const valid = useProjectStore((s) => s.program !== null);
   const flush = useProjectStore((s) => s.flush);
+  const launchMode = useProjectStore((s) => s.setup.launchMode);
+  const openDialog = useProjectStore((s) => s.openDialog);
   const debug = useRuntimeStore((s) => s.debug);
   const setDebug = useRuntimeStore((s) => s.setDebug);
 
@@ -43,6 +47,13 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
         <span className="hidden shrink-0 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-muted tabular-nums xl:inline">
           {blocks} {blocks === 1 ? "BLOCK" : "BLOCKS"}
         </span>
+        <button
+          onClick={() => openDialog("setup")}
+          title="Project setup: how this project relates to a token"
+          className="hidden shrink-0 rounded-full border border-line-2 px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-dim transition-colors hover:border-signal/50 hover:text-fg lg:inline"
+        >
+          {MODE_LABEL[launchMode]}
+        </button>
       </div>
 
       <div className="w-[520px] min-w-[220px] shrink">

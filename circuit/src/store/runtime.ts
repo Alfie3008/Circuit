@@ -12,7 +12,7 @@ import { create } from "zustand";
 import type { Program } from "@/lib/ir";
 import { mockAdapters } from "@/lib/runtime/adapters";
 import { begin, finish, trigger } from "@/lib/runtime/engine";
-import { describeHat, simulateFor, type CircuitEvent, type Match } from "@/lib/runtime/events";
+import { describeHat, marketEvent, presetEvent, simulateFor, type CircuitEvent, type Match, type PresetId } from "@/lib/runtime/events";
 import type { Frame } from "@/lib/runtime/interpreter";
 import { Rng } from "@/lib/runtime/rng";
 import { initialState, loadRuntime, saveRuntime, type RuntimeState } from "@/lib/runtime/state";
@@ -52,6 +52,8 @@ interface RuntimeStore {
   queued: number;
   /** Bottom pane tab. */
   view: "console" | "debugger";
+  /** Live simulation: a market that trades by itself, and real timers. */
+  liveSim: boolean;
 
   load: (projectId: string) => void;
   /** Simulates the event for a script's hat; every script it triggers runs. */
@@ -64,9 +66,16 @@ interface RuntimeStore {
   setSpeed: (speed: Speed) => void;
   resetState: () => void;
   setView: (view: "console" | "debugger") => void;
+  /** Fires a World-panel preset (buy, fees, …) to every script that listens. */
+  firePreset: (id: PresetId) => void;
+  /** Fires any normalized event to every script that listens. */
+  fireEvent: (event: CircuitEvent) => void;
+  setLiveSim: (on: boolean) => void;
 }
 
-type Job = { kind: "event"; event: CircuitEvent; program: Program } | { kind: "match"; match: Match; program: Program };
+type Job =
+  | { kind: "event"; event: CircuitEvent; program: Program; announce?: boolean }
+  | { kind: "match"; match: Match; program: Program };
 
 // Controller internals (not React state).
 let working: RuntimeState = initialState();
@@ -76,8 +85,24 @@ let aborted = false;
 let chainRuns = 0;
 let release: (() => void) | null = null;
 let lastCommit = 0;
+/** The store's pump, for the live-simulation loop (set when the store is created). */
+let pumpRef: (() => Promise<void>) | null = null;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** The current program, or null (with a notice) if it doesn't validate. */
+function runnableProgram(): Program | null {
+  const { program, irError, notify } = useProjectStore.getState();
+  if (!program) notify("error", `The program has an error, so it can't run yet.\n${irError ?? ""}`);
+  return program;
+}
+
+// Live simulation bookkeeping.
+let liveStarted = 0;
+let lastMarket = 0;
+const lastTick = new Map<number, number>(); // minutes → last fire time
+const firedAt = new Map<string, string>(); // at-time hat → date it last fired
+const LIVE_MARKET_MS = 4000;
 
 export const useRuntimeStore = create<RuntimeStore>((set, get) => {
   const commit = (force = false) => {
@@ -171,6 +196,8 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
           if (job.event.source !== "runtime") chainRuns = 0; // a new trigger from you
           const matches = trigger(working, job.program, job.event, rng);
           working.seed = rng.seed;
+          if (!matches.length && job.announce)
+            useProjectStore.getState().notify("info", "Event simulated, but no script listens for it. Add the matching event block.");
           queue.unshift(...matches.map((match) => ({ kind: "match" as const, match, program: job.program })));
           commit(true);
           continue;
@@ -193,6 +220,8 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
     }
   };
 
+  pumpRef = pump;
+
   return {
     projectId: null,
     state: working,
@@ -203,6 +232,7 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
     errorBlockId: null,
     queued: 0,
     view: "console",
+    liveSim: false,
 
     load: (projectId) => {
       if (get().projectId === projectId) return;
@@ -213,11 +243,8 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
     },
 
     fireScript: (scriptIndex) => {
-      const { program, irError } = useProjectStore.getState();
-      if (!program) {
-        useProjectStore.getState().notify("error", `The program has an error, so it can't run yet.\n${irError ?? ""}`);
-        return;
-      }
+      const program = runnableProgram();
+      if (!program) return;
       const script = program.scripts[scriptIndex];
       if (!script) return;
       if (script.event.disabled) {
@@ -255,6 +282,24 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
     },
     setSpeed: (speed) => set({ speed }),
     setView: (view) => set({ view }),
+    firePreset: (id) => {
+      const rng = new Rng(working.seed);
+      const event = presetEvent(id, working, rng);
+      working.seed = rng.seed;
+      get().fireEvent(event);
+    },
+    fireEvent: (event) => {
+      const program = runnableProgram();
+      if (!program) return;
+      queue.push({ kind: "event", event, program, announce: true });
+      set({ queued: queue.length });
+      void pump();
+    },
+    setLiveSim: (on) => {
+      set({ liveSim: on });
+      liveStarted = Date.now();
+      lastTick.clear();
+    },
     resetState: () => {
       if (pumping) get().stop();
       working = initialState();
@@ -269,7 +314,60 @@ export function scriptEvents(program: Program | null) {
   return (program?.scripts ?? []).map((s, i) => ({ index: i, label: describeHat(s.event), disabled: !!s.event.disabled, hatId: s.event.id }));
 }
 
+/**
+ * Live simulation, once a second: a market event every few seconds, and real
+ * timers for "every X minutes" and "at time" scripts. It runs only while this
+ * tab is open (an always-on server runtime is later work).
+ */
+function liveLoop() {
+  const store = useRuntimeStore.getState();
+  if (!store.liveSim) return;
+  const program = useProjectStore.getState().program;
+  // Don't pile up work while paused, debugging or busy.
+  if (!program || store.status === "paused" || queue.length > 3) return;
+  const now = Date.now();
+  const rng = new Rng(working.seed);
+  const events: CircuitEvent[] = [];
+
+  if (now - lastMarket >= LIVE_MARKET_MS) {
+    lastMarket = now;
+    events.push(marketEvent(working, rng, now));
+  }
+
+  const clockNow = new Date(now);
+  const hhmm = clockNow.toTimeString().slice(0, 5);
+  const day = clockNow.toDateString();
+  const minutesSeen = new Set<number>();
+  program.scripts.forEach((s, i) => {
+    const hat = s.event;
+    if (hat.disabled) return;
+    if (hat.type === "every_minutes") {
+      const m = Number(hat.minutes);
+      if (!(m > 0) || minutesSeen.has(m)) return;
+      minutesSeen.add(m);
+      const last = lastTick.get(m) ?? liveStarted;
+      if (now - last >= m * 60_000) {
+        lastTick.set(m, now);
+        events.push({ type: "tick", source: "simulator", timestamp: now, data: { minutes: m } });
+      }
+    }
+    if (hat.type === "at_time" && String(hat.time).trim() === hhmm) {
+      const key = hat.id ?? String(i);
+      if (firedAt.get(key) === day) return;
+      firedAt.set(key, day);
+      events.push({ type: "time", source: "simulator", timestamp: now, data: { time: hhmm } });
+    }
+  });
+
+  working.seed = rng.seed;
+  if (!events.length) return;
+  for (const event of events) queue.push({ kind: "event", event, program });
+  useRuntimeStore.setState({ queued: queue.length });
+  void pumpRef?.();
+}
+
 if (typeof window !== "undefined") {
+  setInterval(liveLoop, 1000);
   // Follow the open project; keep state on page hide.
   useProjectStore.subscribe((s, prev) => {
     if (s.current?.id && s.current.id !== prev.current?.id) useRuntimeStore.getState().load(s.current.id);

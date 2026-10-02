@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { SimulateBar } from "@/components/runtime/SimulateBar";
 import { AgentsPanel, FeedPanel, RunsPanel, StatePanel, WorldPanel } from "@/components/runtime/Panels";
 import { useRuntimeStore } from "@/store/runtime";
 
@@ -15,6 +16,7 @@ export function PreviewPanel() {
 
   return (
     <aside className="flex w-[340px] shrink-0 flex-col border-l border-line bg-panel">
+      <SimulateBar />
       <nav className="flex border-b border-line px-2" role="tablist">
         {TABS.map((t) => (
           <button

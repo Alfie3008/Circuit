@@ -11,12 +11,46 @@ export interface ProjectMeta {
   updatedAt: number;
 }
 
+/**
+ * Birth-time configuration: how the project relates to a token. This is
+ * separate from the runtime program; blocks can't change it.
+ */
+export interface ProjectSetup {
+  launchMode: "prototype" | "existing" | "launch";
+  /** Existing token. */
+  tokenAddress: string;
+  walletAddress: string;
+  monitor: { trades: boolean; volume: boolean; wallet: boolean };
+  /** SOL set aside (separately funded) for the program to spend. */
+  executionBudget: number;
+  /** Launch with Circuit (prototype only, nothing is launched). */
+  tokenName: string;
+  tokenSymbol: string;
+}
+
+export const DEFAULT_SETUP: ProjectSetup = {
+  launchMode: "prototype",
+  tokenAddress: "",
+  walletAddress: "",
+  monitor: { trades: true, volume: true, wallet: false },
+  executionBudget: 1,
+  tokenName: "",
+  tokenSymbol: "",
+};
+
+/** Fills gaps in a stored setup (older projects have none). */
+export const readSetup = (raw: unknown): ProjectSetup => {
+  const r = (raw ?? {}) as Partial<ProjectSetup>;
+  return { ...DEFAULT_SETUP, ...r, monitor: { ...DEFAULT_SETUP.monitor, ...(r.monitor ?? {}) } };
+};
+
 export interface ProjectRecord extends ProjectMeta {
   createdAt: number;
   /** Exact editor state (Blockly JSON) — what we restore from. */
   blockly: WorkspaceState;
   /** The same program as Circuit IR; null if conversion failed. */
   program: Program | null;
+  setup?: ProjectSetup;
 }
 
 interface Index {

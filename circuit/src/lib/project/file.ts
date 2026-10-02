@@ -12,13 +12,14 @@ const Envelope = z.object({
   version: z.literal(1),
   name: z.string().max(120).optional(),
   program: z.unknown(),
+  setup: z.unknown().optional(),
 });
 
-export function serializeProjectFile(name: string, program: Program): string {
-  return JSON.stringify({ format: "circuit", version: 1, name, exportedAt: new Date().toISOString(), program }, null, 2);
+export function serializeProjectFile(name: string, program: Program, setup?: unknown): string {
+  return JSON.stringify({ format: "circuit", version: 1, name, exportedAt: new Date().toISOString(), program, setup }, null, 2);
 }
 
-export type ReadFileResult = { ok: true; name: string; program: Program } | { ok: false; error: string };
+export type ReadFileResult = { ok: true; name: string; program: Program; setup?: unknown } | { ok: false; error: string };
 
 export function readProjectFile(text: string, fallbackName: string): ReadFileResult {
   let json: unknown;
@@ -31,7 +32,7 @@ export function readProjectFile(text: string, fallbackName: string): ReadFileRes
   if (!env.success) return { ok: false, error: "This isn't a CIRCUIT project file (expected format: \"circuit\", version: 1)." };
   const parsed = parseProgram(env.data.program);
   if (!parsed.ok) return { ok: false, error: `The program in this file is invalid:\n${formatIssues(parsed.issues.slice(0, 8))}` };
-  return { ok: true, name: env.data.name?.trim() || fallbackName, program: parsed.program };
+  return { ok: true, name: env.data.name?.trim() || fallbackName, program: parsed.program, setup: env.data.setup };
 }
 
 export const fileNameFor = (name: string) =>

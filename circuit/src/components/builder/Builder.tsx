@@ -4,6 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ConsolePane } from "./ConsolePane";
+import { Dialogs } from "./Dialogs";
 import { BuilderHeader } from "./BuilderHeader";
 import { IrPanel } from "./IrPanel";
 import { NoticeToast } from "./NoticeToast";
@@ -33,6 +34,7 @@ export function Builder() {
         <PreviewPanel />
       </main>
       <NoticeToast />
+      <Dialogs />
     </div>
   );
 }

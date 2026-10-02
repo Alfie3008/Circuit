@@ -77,8 +77,10 @@ export function ProjectMenu() {
 
       {open && (
         <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-line-2 bg-panel p-1 shadow-2xl shadow-black/50">
-          <button role="menuitem" className={item} onClick={run(actions.newProject)}>New project</button>
+          <button role="menuitem" className={item} onClick={run(() => actions.openDialog("templates"))}>New project…</button>
           <button role="menuitem" className={item} onClick={run(actions.duplicateProject)}>Duplicate</button>
+          <button role="menuitem" className={item} onClick={run(() => actions.openDialog("setup"))}>Project setup…</button>
+          <a role="menuitem" className={item} href="/modules">Modules</a>
           <div className="my-1 border-t border-line" />
           <p className="px-3 pb-1 pt-1.5 text-[10.5px] tracking-[0.12em] text-dim">OPEN</p>
           <div className="max-h-56 overflow-y-auto">

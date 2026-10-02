@@ -12,15 +12,19 @@ import {
 import { fileNameFor, readProjectFile, serializeProjectFile } from "@/lib/project/file";
 import { deleteRuntime } from "@/lib/runtime/state";
 import {
+  DEFAULT_SETUP,
   deleteProject as removeStored,
   loadProject,
+  readSetup,
   newProjectId,
   readIndex,
   saveProject,
   setCurrentProject,
   type ProjectMeta,
   type ProjectRecord,
+  type ProjectSetup,
 } from "@/lib/project/storage";
+import { getTemplate } from "@/lib/templates";
 
 export type SaveStatus = "saved" | "saving" | "error";
 
@@ -41,6 +45,9 @@ interface ProjectState {
   canUndo: boolean;
   canRedo: boolean;
   notice: Notice | null;
+  setup: ProjectSetup;
+  /** Open dialog, if any. */
+  dialog: "templates" | "setup" | null;
 
   attach: (ws: Blockly.WorkspaceSvg) => void;
   detach: () => void;
@@ -49,6 +56,10 @@ interface ProjectState {
   workspaceChanged: (e: Blockly.Events.Abstract) => void;
   undo: (redo?: boolean) => void;
   newProject: () => void;
+  /** New project from a template id, or blank when null. */
+  newFromTemplate: (id: string | null) => void;
+  updateSetup: (setup: Partial<ProjectSetup>) => void;
+  openDialog: (dialog: "templates" | "setup" | null) => void;
   openProject: (id: string) => void;
   duplicateProject: () => void;
   renameProject: (name: string) => void;
@@ -132,7 +143,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     const json = JSON.stringify(blockly);
     if (json === lastSavedJson) return set({ saveStatus: "saved" });
     const meta = { ...current, updatedAt: Date.now() };
-    const record: ProjectRecord = { ...meta, createdAt, blockly, program };
+    const record: ProjectRecord = { ...meta, createdAt, blockly, program, setup: get().setup };
     if (saveProject(record)) {
       lastSavedJson = json;
       set({ current: meta, projects: readIndex().projects, saveStatus: "saved" });
@@ -157,9 +168,10 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   };
 
   /** Creates, stores and opens a new project from Blockly state. */
-  const startProject = (name: string, state: WorkspaceState, needsLayout = false) => {
+  const startProject = (name: string, state: WorkspaceState, needsLayout = false, setup: ProjectSetup = DEFAULT_SETUP) => {
     saveNow();
     loadInto(state, needsLayout);
+    set({ setup });
     const now = Date.now();
     createdAt = now;
     const meta: ProjectMeta = { id: newProjectId(), name, updatedAt: now };
@@ -194,7 +206,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     }
     createdAt = record.createdAt;
     const meta: ProjectMeta = { id: record.id, name: record.name, updatedAt: record.updatedAt };
-    set({ current: meta, saveStatus: "saved" });
+    set({ current: meta, saveStatus: "saved", setup: readSetup(record.setup) });
     setCurrentProject(record.id);
     return true;
   };
@@ -209,6 +221,8 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     canUndo: false,
     canRedo: false,
     notice: null,
+    setup: DEFAULT_SETUP,
+    dialog: null,
 
     attach: (workspace) => {
       ws = workspace;
@@ -241,6 +255,24 @@ export const useProjectStore = create<ProjectState>((set, get) => {
 
     newProject: () => startProject(untitled(), EMPTY),
 
+    newFromTemplate: (id) => {
+      const template = id ? getTemplate(id) : undefined;
+      set({ dialog: null });
+      if (!template) return startProject(untitled(), EMPTY);
+      const { state, needsLayout } = programToBlockly(template.program);
+      startProject(uniqueName(template.name), state, needsLayout);
+      get().notify("info", `${template.name}: ${template.tryIt}`);
+    },
+
+    updateSetup: (patch) => {
+      const setup = { ...get().setup, ...patch, monitor: { ...get().setup.monitor, ...(patch.monitor ?? {}) } };
+      set({ setup });
+      lastSavedJson = ""; // setup changed even though blocks didn't
+      saveNow();
+    },
+
+    openDialog: (dialog) => set({ dialog }),
+
     openProject: (id) => {
       const previous = get().current;
       if (id === previous?.id) return;
@@ -259,7 +291,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       saveNow();
       const state = Blockly.serialization.workspaces.save(ws) as WorkspaceState;
       const name = uniqueName(`${current.name} copy`);
-      startProject(name, state);
+      startProject(name, state, false, get().setup);
       get().notify("info", `Duplicated. You're now editing "${name}".`);
     },
 
@@ -301,7 +333,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       if (!ws || !current) return;
       const { program, irError } = snapshot();
       if (!program) return get().notify("error", `Can't export: the program doesn't validate.\n${irError}`);
-      const blob = new Blob([serializeProjectFile(current.name, program)], { type: "application/json" });
+      const blob = new Blob([serializeProjectFile(current.name, program, get().setup)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = Object.assign(document.createElement("a"), { href: url, download: fileNameFor(current.name) });
       a.click();
@@ -313,7 +345,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       if (!result.ok) return get().notify("error", result.error);
       const { state, needsLayout } = programToBlockly(result.program);
       try {
-        startProject(uniqueName(result.name), state, needsLayout);
+        startProject(uniqueName(result.name), state, needsLayout, readSetup(result.setup));
         get().notify("info", `Imported "${result.name}".`);
       } catch (e) {
         get().notify("error", `Couldn't build blocks from this file: ${(e as Error).message}`);
