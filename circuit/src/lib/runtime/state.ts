@@ -80,7 +80,7 @@ export interface Receipt {
   id: number;
   startedAt: number;
   finishedAt: number | null;
-  event: { type: string; label: string; source: string; data: Record<string, Value> };
+  event: { type: string; label: string; source: string; data: Record<string, Value>; proof?: { signature: string; slot: number; explorer: string } };
   hatId?: string;
   status: RunStatus;
   error: string | null;

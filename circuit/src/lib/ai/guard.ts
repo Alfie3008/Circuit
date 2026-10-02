@@ -12,7 +12,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 
-export type RouteKind = "compile" | "runtime";
+export type RouteKind = "compile" | "runtime" | "chain";
 
 const envInt = (name: string, fallback: number) => {
   const n = Number(process.env[name]);
@@ -23,6 +23,7 @@ const envInt = (name: string, fallback: number) => {
 export const limits = () => ({
   compile: envInt("CIRCUIT_AI_RATE_LIMIT", 10),
   runtime: envInt("CIRCUIT_AI_RUNTIME_RATE_LIMIT", 60),
+  chain: envInt("CIRCUIT_CHAIN_RATE_LIMIT", 120),
   daily: envInt("CIRCUIT_AI_DAILY_LIMIT", 1000),
 });
 
@@ -53,29 +54,30 @@ export function guard(req: Request, kind: RouteKind, now = Date.now()): Response
   const expected = process.env.CIRCUIT_AI_PASSWORD;
   if (expected) {
     const given = req.headers.get("x-circuit-password") ?? "";
-    if (!samePassword(given, expected)) return json(401, { error: "This CIRCUIT needs a password for AI features.", needsPassword: true });
+    if (!samePassword(given, expected)) return json(401, { error: "This CIRCUIT needs a password.", needsPassword: true });
   } else if (!LOCAL_HOSTS.has(new URL(req.url).hostname)) {
-    return json(403, { error: "AI routes are disabled: set CIRCUIT_AI_PASSWORD before deploying." });
+    return json(403, { error: "This route is disabled: set CIRCUIT_AI_PASSWORD before deploying." });
   }
 
-  const { compile, runtime, daily } = limits();
+  const { daily, ...perMinute } = limits();
   const today = new Date(now).toISOString().slice(0, 10);
   if (today !== day) {
     day = today;
     dayCount = 0;
   }
-  if (dayCount >= daily) return json(429, { error: "Daily AI limit reached for this server." }, { "retry-after": "3600" });
+  // The daily cap is for AI spend; chain reads have their own provider quota.
+  if (kind !== "chain" && dayCount >= daily) return json(429, { error: "Daily AI limit reached for this server." }, { "retry-after": "3600" });
 
   const key = `${kind}:${clientKey(req)}`;
   const recent = (windows.get(key) ?? []).filter((t) => now - t < 60_000);
-  const max = kind === "compile" ? compile : runtime;
+  const max = perMinute[kind];
   if (recent.length >= max) {
     const retry = Math.ceil((60_000 - (now - recent[0])) / 1000);
-    return json(429, { error: `Too many AI requests. Try again in ${retry}s.` }, { "retry-after": String(retry) });
+    return json(429, { error: `Too many requests. Try again in ${retry}s.` }, { "retry-after": String(retry) });
   }
   recent.push(now);
   windows.set(key, recent);
-  dayCount += 1;
+  if (kind !== "chain") dayCount += 1;
   return null;
 }
 

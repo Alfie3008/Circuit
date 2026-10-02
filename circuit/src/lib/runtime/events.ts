@@ -26,11 +26,20 @@ export type EventKind =
   | "bounty_submission"
   | "button";
 
+/** Where a live event happened on chain (Solscan-verifiable). */
+export interface Proof {
+  signature: string;
+  slot: number;
+  explorer: string;
+}
+
 export interface CircuitEvent {
   type: EventKind;
   source: "simulator" | "runtime" | "live";
   timestamp: number;
   data: Record<string, Value>;
+  /** Set for live events: the transaction that caused it. */
+  proof?: Proof;
 }
 
 type Market = RuntimeState["market"];
@@ -41,6 +50,8 @@ export interface Match {
   /** What `event [field]` reads inside this script. */
   payload: Record<string, Value>;
   label: string;
+  /** The event that triggered it (source and proof go on the receipt). */
+  event: CircuitEvent;
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -181,8 +192,9 @@ export function applyEvent(state: RuntimeState, event: CircuitEvent, rng: Rng): 
       const amount = toNumber(d.amount);
       m.totalVolume = round(m.totalVolume + amount, 4);
       m.trades += 1;
-      m.marketCap = Math.max(1000, Math.round(m.marketCap + (d.side === "sell" ? -1 : 1) * amount * 900));
-      if (d.side === "buy" && rng.next() < 0.5) m.holders += 1;
+      if (typeof d.marketCap === "number") m.marketCap = d.marketCap; // live: priced from the trade
+      else m.marketCap = Math.max(1000, Math.round(m.marketCap + (d.side === "sell" ? -1 : 1) * amount * 900));
+      if (event.source === "simulator" && d.side === "buy" && rng.next() < 0.5) m.holders += 1;
       break;
     }
     case "market_cap":
@@ -240,7 +252,7 @@ export function dispatch(program: Program, event: CircuitEvent, before: Market, 
     const hat = script.event;
     if (hat.disabled) return;
     const add = (payload: Record<string, Value>, label: string) =>
-      out.push({ scriptIndex, script, payload: { ...payload, timestamp: ts }, label });
+      out.push({ scriptIndex, script, payload: { ...payload, timestamp: ts }, label, event });
     switch (event.type) {
       case "trade": {
         const amount = toNumber(d.amount);
