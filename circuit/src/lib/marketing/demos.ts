@@ -110,3 +110,20 @@ export const TINY = program([
 
 /** The closing call to action: an event with nothing attached yet. */
 export const BLANK = program([{ event: { type: "trade", side: "any_side" }, body: [] }]);
+
+/** Number of blocks in a program (what the builder shows as N BLOCKS). */
+export function countBlocks(program: Program): number {
+  let n = 0;
+  const visit = (v: unknown) => {
+    if (!v || typeof v !== "object") return;
+    if (Array.isArray(v)) return v.forEach(visit);
+    const node = v as Record<string, unknown>;
+    if (typeof node.type === "string") n++;
+    Object.entries(node).forEach(([k, x]) => k !== "position" && visit(x));
+  };
+  program.scripts.forEach((s) => {
+    visit(s.event);
+    visit(s.body);
+  });
+  return n;
+}

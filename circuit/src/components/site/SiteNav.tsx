@@ -8,14 +8,14 @@ const LINKS = [
   { href: "/docs", label: "Docs" },
 ];
 
-export function SiteNav() {
+export function SiteNav({ active }: { active?: string }) {
   return (
     <header className="sticky top-0 z-50 border-b border-[#1d1f23] bg-[rgba(11,12,13,.82)] backdrop-blur-[12px]">
       <div className="mx-auto flex h-[60px] max-w-[1240px] items-center gap-8 px-6">
         <Logo />
         <nav className="hidden flex-wrap gap-6 text-[14px] sm:flex">
           {LINKS.map((l, i) => (
-            <Link key={l.href} href={l.href} className="text-[#a9abb1] hover:text-signal">
+            <Link key={l.href} href={l.href} className={`${active === l.href ? "text-fg" : "text-[#a9abb1]"} hover:text-signal`}>
               <span className="mr-1.5 font-mono text-[11px] text-faint">{String(i + 1).padStart(2, "0")}</span>
               {l.label}
             </Link>

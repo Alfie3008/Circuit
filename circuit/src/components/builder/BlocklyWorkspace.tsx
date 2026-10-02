@@ -7,8 +7,25 @@ import { attachWorkspaceCallbacks, registerCircuitBlocks } from "@/lib/blocks/re
 import { CIRCUIT_RENDERER, registerCircuitRenderer } from "@/lib/blocks/renderer";
 import { createCircuitTheme, loadBlockFont } from "@/lib/blocks/theme";
 import { buildToolbox } from "@/lib/blocks/toolbox";
+import { DIARY } from "@/lib/marketing/demos";
+import { getTemplate } from "@/lib/templates";
 import { markBlock, useProjectStore } from "@/store/project";
 import { useRuntimeStore } from "@/store/runtime";
+
+/**
+ * /build?template=<id> opens a template as a new project (Examples, Docs and
+ * the home page link here). The parameter is removed so a reload doesn't
+ * create another copy.
+ */
+function openFromUrl() {
+  const id = new URLSearchParams(location.search).get("template");
+  if (!id) return;
+  const store = useProjectStore.getState();
+  if (id === "blank") store.newFromTemplate(null);
+  else if (id === "diary") store.openProgram("Diary characters", DIARY);
+  else if (getTemplate(id)) store.newFromTemplate(id);
+  history.replaceState(null, "", location.pathname);
+}
 
 /** The Blockly canvas. Client-only — loaded with `ssr: false`. */
 export default function BlocklyWorkspace() {
@@ -45,6 +62,7 @@ export default function BlocklyWorkspace() {
 
       const { attach, detach, flush, workspaceChanged } = useProjectStore.getState();
       attach(ws); // loads the current project (or creates the first one)
+      openFromUrl();
       ws.addChangeListener(workspaceChanged);
       ws.addChangeListener((e) => {
         if (e.type === Blockly.Events.SELECTED)

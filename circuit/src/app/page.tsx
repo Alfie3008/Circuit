@@ -250,7 +250,7 @@ export default function Home() {
               <span className="text-signal">happen next?</span>
             </h2>
             <div className="mt-8 flex flex-wrap justify-center gap-2.5">
-              <Link href="/build" className={`${primary} h-[46px] px-5 text-[15px]`}>
+              <Link href="/build?template=blank" className={`${primary} h-[46px] px-5 text-[15px]`}>
                 Start building
               </Link>
               <a href="#describe" className={`${secondary} h-[46px] px-5 text-[15px]`}>

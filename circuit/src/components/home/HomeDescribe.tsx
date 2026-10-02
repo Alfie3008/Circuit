@@ -52,7 +52,7 @@ export function HomeDescribe() {
             <button onClick={build} className="h-[42px] cursor-pointer rounded-lg border-none bg-signal px-[18px] text-[14.5px] font-medium text-signal-ink hover:brightness-[1.08]">
               Build with AI
             </button>
-            <Link href="/build" className="inline-flex h-[42px] items-center whitespace-nowrap rounded-lg border border-[#34363c] px-[18px] text-[14.5px] text-fg hover:bg-white/[0.04] hover:text-fg">
+            <Link href="/build?template=diary" className="inline-flex h-[42px] items-center whitespace-nowrap rounded-lg border border-[#34363c] px-[18px] text-[14.5px] text-fg hover:bg-white/[0.04] hover:text-fg">
               Edit blocks
             </Link>
             <span className="ml-1.5 font-mono text-[11.5px] text-muted">{status}</span>
