@@ -1,0 +1,158 @@
+import {
+  anyIn,
+  boolIn,
+  category,
+  dropdown,
+  listIn,
+  num,
+  numIn,
+  row,
+  stmt,
+  text,
+  textIn,
+  variable,
+  type BlockSpec,
+} from "../types";
+
+const control = category("control", "core", [
+  {
+    type: "control_if",
+    ir: "if",
+    shape: "statement",
+    rows: [row("if", boolIn("CONDITION")), row("then", stmt("THEN"))],
+    tooltip: "Runs the inner blocks only when the condition is true.",
+  },
+  {
+    type: "control_if_else",
+    ir: "if",
+    shape: "statement",
+    rows: [row("if", boolIn("CONDITION")), row("then", stmt("THEN")), row("else", stmt("ELSE"))],
+    tooltip: "Runs one branch or the other depending on the condition.",
+  },
+  {
+    type: "control_repeat",
+    ir: "repeat",
+    shape: "statement",
+    rows: [row("repeat", numIn("TIMES", 3), "times"), row(stmt("DO"))],
+    tooltip: "Runs the inner blocks a number of times.",
+  },
+  {
+    type: "control_for_each",
+    ir: "for_each",
+    shape: "statement",
+    rows: [row("for each", variable("VAR", "item"), "in", listIn("LIST")), row(stmt("DO"))],
+    tooltip: "Runs the inner blocks once per list item, with the item stored in the variable.",
+  },
+  {
+    type: "control_wait",
+    ir: "wait",
+    shape: "statement",
+    rows: [row("wait", numIn("SECONDS", 1), "seconds")],
+    tooltip: "Pauses this script.",
+  },
+  {
+    type: "control_cooldown",
+    ir: "cooldown",
+    shape: "statement",
+    rows: [row("at most once every", num("SECONDS", 60, { min: 0 }), "seconds"), row(stmt("DO"))],
+    tooltip: "Skips the inner blocks if they already ran within the cooldown window.",
+  },
+  {
+    type: "control_stop",
+    ir: "stop",
+    shape: "terminal",
+    rows: [row("stop", dropdown("SCOPE", ["this script", "all scripts"]))],
+    tooltip: "Ends execution.",
+  },
+  {
+    type: "control_parallel",
+    ir: "parallel",
+    shape: "statement",
+    rows: [row("run in parallel"), row("branch A", stmt("A")), row("branch B", stmt("B"))],
+    tooltip: "Runs both branches at the same time and continues when both finish.",
+  },
+  {
+    type: "control_sequence",
+    ir: "sequence",
+    shape: "statement",
+    rows: [row("run sequence", text("NAME", "steps")), row(stmt("DO"))],
+    tooltip: "Groups blocks into a named, collapsible sequence.",
+  },
+  {
+    type: "control_random_chance",
+    ir: "random_chance",
+    shape: "statement",
+    rows: [row("with", numIn("PERCENT", 25), "% chance"), row("do", stmt("THEN")), row("otherwise", stmt("ELSE"))],
+    tooltip: "Randomly picks a branch: the first runs with the given probability.",
+  },
+  {
+    type: "control_switch",
+    ir: "switch",
+    shape: "statement",
+    rows: [
+      row("switch on", anyIn("VALUE")),
+      row("case", text("CASE1", "a"), stmt("DO1")),
+      row("case", text("CASE2", "b"), stmt("DO2")),
+      row("case", text("CASE3", "c"), stmt("DO3")),
+      row("default", stmt("DEFAULT")),
+    ],
+    tooltip: "Runs the branch whose case text equals the value, or the default.",
+  },
+]);
+
+const logic = category("logic", "core", [
+  {
+    type: "logic_compare",
+    ir: "compare",
+    shape: "boolean",
+    rows: [
+      row(anyIn("A"), dropdown("OP", [["=", "eq"], ["≠", "neq"], [">", "gt"], ["<", "lt"], ["≥", "gte"], ["≤", "lte"]]), anyIn("B")),
+    ],
+    tooltip: "Compares two values.",
+  },
+  {
+    type: "logic_contains",
+    ir: "contains",
+    shape: "boolean",
+    rows: [row(anyIn("HAYSTACK", "hello world"), "contains", anyIn("NEEDLE", "world"))],
+    tooltip: "True if the text contains the substring, or the list contains the item.",
+  },
+  {
+    type: "logic_and_or",
+    ir: "logic_op",
+    shape: "boolean",
+    rows: [row(boolIn("A"), dropdown("OP", [["and", "and"], ["or", "or"]]), boolIn("B"))],
+    tooltip: "Combines two conditions.",
+  },
+  {
+    type: "logic_not",
+    ir: "not",
+    shape: "boolean",
+    rows: [row("not", boolIn("VALUE"))],
+    tooltip: "Inverts a condition.",
+  },
+  {
+    type: "logic_exists",
+    ir: "exists",
+    shape: "boolean",
+    rows: [row(anyIn("VALUE"), "exists")],
+    tooltip: "True if the value is set (not empty).",
+  },
+  {
+    type: "logic_random_chance",
+    ir: "chance",
+    shape: "boolean",
+    rows: [row("random chance", numIn("PERCENT", 25), "%")],
+    tooltip: "True with the given probability.",
+  },
+  {
+    type: "logic_wallet_owns",
+    ir: "wallet_owns",
+    module: "solana",
+    shape: "boolean",
+    rows: [row("wallet", textIn("WALLET", "wallet"), "owns token", textIn("TOKEN", "mint"))],
+    tooltip: "True if the wallet holds a non-zero balance of the token (mock or live read).",
+  },
+]);
+
+export const CONTROL_BLOCKS: BlockSpec[] = [...control, ...logic];

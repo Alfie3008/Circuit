@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #0b0e14;
+  --color-panel: #11151f;
+  --color-line: #232a3a;
+  --color-fg: #e6eaf2;
+  --color-muted: #8a93a8;
+  --color-accent: #7c5cff;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* ---- Blockly chrome tuned to the dark UI ---- */
+.blocklyToolbox {
+  padding-top: 6px;
+  border-right: 1px solid var(--color-line);
+}
+.blocklyToolboxCategory {
+  padding: 3px 10px 3px 4px;
+  margin-bottom: 1px;
+  border-radius: 0 6px 6px 0;
+}
+.blocklyToolboxCategoryLabel {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+}
+.blocklyFlyoutButtonBackground {
+  fill: #7c5cff;
+  stroke: none;
+}
+.blocklyFlyoutButton:hover .blocklyFlyoutButtonBackground {
+  fill: #9077ff;
+}
+.blocklyFlyoutButton .blocklyText {
+  fill: #ffffff;
+  font-weight: 600;
+}
+.blocklyTooltipDiv {
+  background: #1b2130 !important;
+  color: #e6eaf2 !important;
+  border: 1px solid var(--color-line) !important;
+  border-radius: 6px;
+  font-family: var(--font-sans), system-ui, sans-serif !important;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.4) !important;
+}
