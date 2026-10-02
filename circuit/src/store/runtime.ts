@@ -10,7 +10,9 @@
  */
 import { create } from "zustand";
 import type { Program } from "@/lib/ir";
-import { mockAdapters } from "@/lib/runtime/adapters";
+import { fetchAiStatus, type AiStatus } from "@/lib/ai/client";
+import { mockAdapters, mockAi, mockWeb, type Adapters } from "@/lib/runtime/adapters";
+import { remoteAi } from "@/lib/runtime/remoteAi";
 import { begin, finish, trigger } from "@/lib/runtime/engine";
 import { describeHat, marketEvent, presetEvent, simulateFor, type CircuitEvent, type Match, type PresetId } from "@/lib/runtime/events";
 import type { Frame } from "@/lib/runtime/interpreter";
@@ -54,6 +56,8 @@ interface RuntimeStore {
   view: "console" | "debugger";
   /** Live simulation: a market that trades by itself, and real timers. */
   liveSim: boolean;
+  /** Real AI availability (from /api/ai); null until known or if unreachable. */
+  aiStatus: AiStatus | null;
 
   load: (projectId: string) => void;
   /** Simulates the event for a script's hat; every script it triggers runs. */
@@ -89,6 +93,22 @@ let lastCommit = 0;
 let pumpRef: (() => Promise<void>) | null = null;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Fallback reasons already shown this session (so a long run doesn't spam notices). */
+const noticedFallbacks = new Set<string>();
+
+/** Real Claude for AI blocks when the server has a key; mock answers otherwise. */
+function makeAdapters(rng: Rng, ai: AiStatus | null): Adapters {
+  if (!ai?.enabled) return mockAdapters(rng);
+  return {
+    ai: remoteAi(mockAi(rng), ai.runtimeModel, (reason) => {
+      if (noticedFallbacks.has(reason)) return;
+      noticedFallbacks.add(reason);
+      useProjectStore.getState().notify("error", `AI block used a mock answer: ${reason}`);
+    }),
+    web: mockWeb(rng),
+  };
+}
 
 /** The current program, or null (with a notice) if it doesn't validate. */
 function runnableProgram(): Program | null {
@@ -132,7 +152,7 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
   };
 
   const runMatch = async (match: Match, program: Program, rng: Rng) => {
-    const adapters = mockAdapters(rng);
+    const adapters = makeAdapters(rng, get().aiStatus);
     const { receipt, run } = begin(working, match, {
       rng,
       adapters,
@@ -233,6 +253,7 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
     queued: 0,
     view: "console",
     liveSim: false,
+    aiStatus: null,
 
     load: (projectId) => {
       if (get().projectId === projectId) return;
@@ -368,6 +389,7 @@ function liveLoop() {
 
 if (typeof window !== "undefined") {
   setInterval(liveLoop, 1000);
+  void fetchAiStatus().then((aiStatus) => useRuntimeStore.setState({ aiStatus }));
   // Follow the open project; keep state on page hide.
   useProjectStore.subscribe((s, prev) => {
     if (s.current?.id && s.current.id !== prev.current?.id) useRuntimeStore.getState().load(s.current.id);

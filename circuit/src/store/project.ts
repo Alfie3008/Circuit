@@ -59,6 +59,8 @@ interface ProjectState {
   /** New project from a template id, or blank when null. */
   newFromTemplate: (id: string | null) => void;
   updateSetup: (setup: Partial<ProjectSetup>) => void;
+  /** Opens a Circuit IR program (e.g. from Build with AI) as a new project. */
+  openProgram: (name: string, program: Program) => void;
   openDialog: (dialog: "templates" | "setup" | null) => void;
   openProject: (id: string) => void;
   duplicateProject: () => void;
@@ -262,6 +264,11 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       const { state, needsLayout } = programToBlockly(template.program);
       startProject(uniqueName(template.name), state, needsLayout);
       get().notify("info", `${template.name}: ${template.tryIt}`);
+    },
+
+    openProgram: (name, program) => {
+      const { state, needsLayout } = programToBlockly(program);
+      startProject(uniqueName(name), state, needsLayout);
     },
 
     updateSetup: (patch) => {
