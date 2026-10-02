@@ -10,6 +10,7 @@ import {
   type WorkspaceState,
 } from "@/lib/ir";
 import { fileNameFor, readProjectFile, serializeProjectFile } from "@/lib/project/file";
+import { deleteRuntime } from "@/lib/runtime/state";
 import {
   deleteProject as removeStored,
   loadProject,
@@ -77,6 +78,21 @@ let noticeId = 0;
 
 const AUTOSAVE_MS = 500;
 const EMPTY: WorkspaceState = {};
+
+/** Id of the top block of the selected stack (a script's hat), if any. */
+export function selectedRootId(): string | null {
+  const selected = ws ? Blockly.getSelected() : null;
+  return selected instanceof Blockly.BlockSvg ? selected.getRootBlock().id : null;
+}
+
+/** Lights up a block on the canvas (running / failed), clearing the previous one. */
+export function markBlock(kind: "active" | "error", id: string | null | undefined) {
+  if (!ws) return;
+  const cls = kind === "active" ? "circuitActive" : "circuitError";
+  for (const el of ws.getParentSvg().querySelectorAll(`.${cls}`)) el.classList.remove(cls);
+  const block = id ? ws.getBlockById(id) : null;
+  block?.getSvgRoot().classList.add(cls);
+}
 
 export const useProjectStore = create<ProjectState>((set, get) => {
   /** Blockly JSON + IR for the current workspace. */
@@ -272,6 +288,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     deleteProject: (id) => {
       if (id === get().current?.id) clearTimeout(saveTimer); // don't resurrect it
       removeStored(id);
+      deleteRuntime(id);
       const projects = readIndex().projects;
       set({ projects });
       if (id !== get().current?.id) return;

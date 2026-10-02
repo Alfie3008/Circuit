@@ -2,21 +2,16 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { AgentsPanel, FeedPanel, RunsPanel, StatePanel, WorldPanel } from "@/components/runtime/Panels";
+import { useRuntimeStore } from "@/store/runtime";
 
 const TABS = ["World", "State", "Agents", "Feed", "Runs"] as const;
 type Tab = (typeof TABS)[number];
 
-const EMPTY: Record<Tab, string> = {
-  World: "Empty. Entities your program creates will appear here.",
-  State: "Live variables and the simulated treasury. They persist between runs and reloads.",
-  Agents: "Every persistent agent, with identity, memory and inventory.",
-  Feed: "Activity your program posts to the project feed.",
-  Runs: "A receipt for every execution, with each side effect listed.",
-};
-
-/** Project World preview. Tabs fill in with the runtime in Phase 3 and 4. */
+/** Project World preview: what the program's executions have left behind. */
 export function PreviewPanel() {
   const [tab, setTab] = useState<Tab>("World");
+  const state = useRuntimeStore((s) => s.state);
 
   return (
     <aside className="flex w-[340px] shrink-0 flex-col border-l border-line bg-panel">
@@ -27,7 +22,7 @@ export function PreviewPanel() {
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`relative flex-1 py-3 font-mono text-[11px] tracking-[0.12em] uppercase transition-colors ${
+            className={`relative flex-1 py-3 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors ${
               tab === t ? "text-fg" : "text-dim hover:text-fg-2"
             }`}
           >
@@ -36,14 +31,12 @@ export function PreviewPanel() {
           </button>
         ))}
       </nav>
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex justify-between font-mono text-[11px] tracking-[0.12em] text-muted">
-          <span>{tab.toUpperCase()}</span>
-          <span className="text-faint">PHASE 3</span>
-        </div>
-        <div className="mt-3.5 flex flex-1 items-center justify-center rounded-[10px] border border-dashed border-[#2a2c31] p-6 text-center text-[13px] leading-relaxed text-[#5d6066]">
-          {EMPTY[tab]}
-        </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+        {tab === "World" && <WorldPanel state={state} />}
+        {tab === "State" && <StatePanel state={state} />}
+        {tab === "Agents" && <AgentsPanel state={state} />}
+        {tab === "Feed" && <FeedPanel state={state} />}
+        {tab === "Runs" && <RunsPanel state={state} />}
       </div>
     </aside>
   );

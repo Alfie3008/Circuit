@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { CodeIcon } from "@/components/ui/icons";
 import { useProjectStore } from "@/store/project";
+import { useRuntimeStore } from "@/store/runtime";
 import { AiBar } from "./AiBar";
 import { SaveIndicator, UndoRedo } from "./EditorControls";
 import { ProjectMenu } from "./ProjectMenu";
+import { RunButton } from "./RunButton";
 
 /** Three-node circuit mark from the design: two outlined nodes and a lit amber one. */
 function LogoMark() {
@@ -26,8 +28,8 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
   const blocks = useProjectStore((s) => s.stats.blocks);
   const valid = useProjectStore((s) => s.program !== null);
   const flush = useProjectStore((s) => s.flush);
-  const notify = useProjectStore((s) => s.notify);
-  const soon = () => notify("info", "Running and debugging arrive with the runtime in Phase 3.");
+  const debug = useRuntimeStore((s) => s.debug);
+  const setDebug = useRuntimeStore((s) => s.setDebug);
 
   return (
     <header className="relative z-30 flex h-[52px] shrink-0 items-center gap-4 border-b border-[#1d1f23] bg-ink px-4">
@@ -59,20 +61,18 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
           <CodeIcon width={13} height={13} />
           <span className={`h-1.5 w-1.5 rounded-full ${valid ? "bg-ok" : "bg-err"}`} aria-label={valid ? "IR valid" : "IR invalid"} />
         </button>
-        <button className={ghostBtn} onClick={soon} title="Step through a run (Phase 3)">
+        <button
+          className={`${ghostBtn} ${debug ? "border-signal/55 bg-signal/10 text-[oklch(0.88_0.13_80)] hover:bg-signal/15" : ""}`}
+          onClick={() => setDebug(!debug)}
+          aria-pressed={debug}
+          title="Debug mode: runs pause at every block so you can step through them"
+        >
           Debug
         </button>
         <button className={ghostBtn} onClick={flush} title="Projects autosave. Save writes immediately.">
           Save
         </button>
-        <button
-          onClick={soon}
-          title="Run the program (Phase 3)"
-          className="inline-flex h-[30px] items-center gap-2 whitespace-nowrap rounded-md bg-signal px-3.5 font-mono text-xs font-medium tracking-[0.04em] text-signal-ink transition-[filter] hover:brightness-110"
-        >
-          <span className="h-0 w-0 border-y-[4px] border-l-[6px] border-y-transparent border-l-signal-ink" aria-hidden />
-          Run
-        </button>
+        <RunButton />
       </div>
     </header>
   );

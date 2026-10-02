@@ -7,7 +7,8 @@ import { attachWorkspaceCallbacks, registerCircuitBlocks } from "@/lib/blocks/re
 import { CIRCUIT_RENDERER, registerCircuitRenderer } from "@/lib/blocks/renderer";
 import { createCircuitTheme, loadBlockFont } from "@/lib/blocks/theme";
 import { buildToolbox } from "@/lib/blocks/toolbox";
-import { useProjectStore } from "@/store/project";
+import { markBlock, useProjectStore } from "@/store/project";
+import { useRuntimeStore } from "@/store/runtime";
 
 /** The Blockly canvas. Client-only — loaded with `ssr: false`. */
 export default function BlocklyWorkspace() {
@@ -46,11 +47,18 @@ export default function BlocklyWorkspace() {
       attach(ws); // loads the current project (or creates the first one)
       ws.addChangeListener(workspaceChanged);
 
+      // Light up the block that is running (and the one that failed).
+      const unsubRuntime = useRuntimeStore.subscribe((s, prev) => {
+        if (s.live?.blockId !== prev.live?.blockId) markBlock("active", s.live?.blockId);
+        if (s.errorBlockId !== prev.errorBlockId) markBlock("error", s.errorBlockId);
+      });
+
       const ro = new ResizeObserver(() => Blockly.svgResize(ws));
       ro.observe(el);
       window.addEventListener("pagehide", flush);
       setReady(true);
       cleanup = () => {
+        unsubRuntime();
         window.removeEventListener("pagehide", flush);
         ro.disconnect();
         detach();
