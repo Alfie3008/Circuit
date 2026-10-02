@@ -155,7 +155,7 @@ export function SetupDialog() {
             <strong className="font-medium">Creator-fee routing depends on the token&apos;s existing configuration and is not automatically changed by Circuit.</strong> The
             program runs on the separately funded execution budget above.
           </p>
-          <p className="text-[12px] text-dim">Live read-only monitoring of this token arrives in Phase 6 (Helius). Until then, use the simulator.</p>
+          <p className="text-[12px] text-dim">Watch this token for real in the simulator bar&apos;s LIVE TOKEN tab (needs HELIUS_API_KEY or CIRCUIT_SOLANA_RPC_URL in .env.local). Read-only: Circuit never signs anything.</p>
         </div>
       )}
 
