@@ -17,6 +17,11 @@ export interface ToolboxBlock {
 export const VARIABLES_CATEGORY = "CIRCUIT_VARIABLES";
 export const CREATE_VARIABLE_BUTTON = "CIRCUIT_CREATE_VARIABLE";
 
+/** Flyout heading, e.g. "EVENTS · 5 BLOCKS". */
+export function flyoutHeader(name: string, count: number) {
+  return { kind: "label", text: `${name.toUpperCase()} · ${count} ${count === 1 ? "BLOCK" : "BLOCKS"}`, "web-class": "circuitFlyoutHeader" } as const;
+}
+
 /** Toolbox entry for a block, with default shadows/blocks filled into its inputs. */
 export function toolboxEntry(spec: BlockSpec, fieldOverrides: Json = {}): ToolboxBlock {
   const inputs: Json = {};
@@ -40,7 +45,8 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
     contents: CATEGORIES.map((cat) => {
       const base = { kind: "category", name: cat.name, categorystyle: `${cat.id}_category` };
       if (cat.id === "variables") return { ...base, custom: VARIABLES_CATEGORY };
-      return { ...base, contents: BLOCKS.filter((b) => b.category === cat.id).map((b) => toolboxEntry(b)) };
+      const blocks = BLOCKS.filter((b) => b.category === cat.id);
+      return { ...base, contents: [flyoutHeader(cat.name, blocks.length), ...blocks.map((b) => toolboxEntry(b))] };
     }),
   } as Blockly.utils.toolbox.ToolboxDefinition;
 }
@@ -54,6 +60,7 @@ export function variablesFlyout(variables: { id: string; name: string }[]): Bloc
   const getter = varBlocks.find((b) => b.type === "variables_get")!;
   const first = variables[0];
   return [
+    flyoutHeader("Variables", variables.length + varBlocks.length - 1),
     { kind: "label", text: "Variables keep their values between runs" },
     { kind: "button", text: "+ New variable", callbackkey: CREATE_VARIABLE_BUTTON, "web-class": "circuitNewVariable" },
     { kind: "sep", gap: 16 },

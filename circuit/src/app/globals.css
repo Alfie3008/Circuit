@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
+/* Design tokens (from the CIRCUIT design: Geist / Geist Mono, near-black, amber signal). */
 @theme inline {
-  --color-ink: #0b0e14;
-  --color-panel: #11151f;
-  --color-line: #232a3a;
-  --color-fg: #e6eaf2;
-  --color-muted: #8a93a8;
-  --color-accent: #7c5cff;
+  --color-ink: #0b0c0d;
+  --color-canvas: #0e0f11;
+  --color-panel: #111214;
+  --color-raised: #16181b;
+  --color-line: #1f2125;
+  --color-line-2: #2c2f35;
+  --color-fg: #e8e6e1;
+  --color-fg-2: #a3a5ab;
+  --color-muted: #8b8d93;
+  --color-dim: #6d7076;
+  --color-faint: #55585e;
+  --color-signal: oklch(0.84 0.15 80);
+  --color-signal-ink: #15130f;
+  --color-ok: oklch(0.8 0.13 155);
+  --color-err: oklch(0.68 0.19 25);
+  --color-var: oklch(0.86 0.06 235);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,6 +27,14 @@ body {
   background: var(--color-ink);
   color: var(--color-fg);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2c31 transparent;
+}
+::selection {
+  background: oklch(0.84 0.15 80 / 0.35);
 }
 
 /* Tailwind's preflight sets `svg { display: block }`, which beats SVG presentation
@@ -25,44 +44,99 @@ body {
   display: none;
 }
 
-/* ---- Blockly chrome tuned to the dark UI ---- */
+/* ---- Category rail (Blockly toolbox) ---- */
 .blocklyToolbox {
-  padding-top: 6px;
+  width: 56px;
+  padding: 10px 0 0;
   border-right: 1px solid var(--color-line);
 }
+.blocklyToolboxCategoryContainer {
+  display: flex;
+  justify-content: center;
+}
 .blocklyToolboxCategory {
-  padding: 3px 10px 3px 4px;
-  margin-bottom: 1px;
-  border-radius: 0 6px 6px 0;
+  display: flex;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  margin: 0 0 2px;
+  padding: 0 !important;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 0.12s;
 }
-.blocklyToolboxCategoryLabel {
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 500;
+.blocklyToolboxCategory:hover {
+  background: #ffffff0a;
 }
-.blocklyFlyoutButtonBackground {
-  fill: #7c5cff;
-  stroke: none;
+.blocklyToolboxCategory.blocklyToolboxSelected {
+  background: #ffffff10;
+  box-shadow: inset 0 0 0 1px #2c2f35;
 }
-.blocklyFlyoutButton:hover .blocklyFlyoutButtonBackground {
-  fill: #9077ff;
+.blocklyToolboxCategory .blocklyTreeRowContentContainer,
+.blocklyToolboxCategory > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
-.blocklyFlyoutButton .blocklyText {
-  fill: #ffffff;
-  font-weight: 600;
+.circuitRailTag {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  color: var(--tag);
+  border: 1px solid var(--tag-line);
+  border-radius: 4px;
+  padding: 0 4px;
 }
-.circuitNewVariable .blocklyText {
-  font-size: 14px;
+.blocklyToolboxSelected .circuitRailTag {
+  border-color: var(--tag);
+  box-shadow: 0 0 10px -2px var(--tag);
+}
+.circuitRailName {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- Flyout ---- */
+.circuitFlyoutHeader .blocklyFlyoutLabelText {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  fill: var(--color-muted);
 }
 .blocklyFlyoutLabel .blocklyFlyoutLabelText {
-  fill: #8a93a8;
+  fill: var(--color-dim);
   font-size: 11px;
 }
+.blocklyFlyoutButtonBackground {
+  fill: oklch(0.84 0.15 80 / 0.1);
+  stroke: oklch(0.84 0.15 80 / 0.55);
+  stroke-width: 1px;
+}
+.blocklyFlyoutButton:hover .blocklyFlyoutButtonBackground {
+  fill: oklch(0.84 0.15 80 / 0.2);
+}
+.blocklyFlyoutButton .blocklyText {
+  fill: oklch(0.88 0.13 80);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-weight: 500;
+}
+.circuitNewVariable .blocklyText {
+  font-size: 12px;
+}
+
+/* ---- Tooltips ---- */
 .blocklyTooltipDiv {
-  background: #1b2130 !important;
-  color: #e6eaf2 !important;
-  border: 1px solid var(--color-line) !important;
-  border-radius: 6px;
+  background: #16181b !important;
+  color: var(--color-fg) !important;
+  border: 1px solid var(--color-line-2) !important;
+  border-radius: 8px;
   font-family: var(--font-sans), system-ui, sans-serif !important;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.4) !important;
+  font-size: 12.5px !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.5) !important;
 }

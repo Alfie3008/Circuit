@@ -22,10 +22,10 @@ export function IrPanel({ onClose }: { onClose: () => void }) {
       aria-label="Circuit IR"
     >
       <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Circuit IR</h2>
+        <h2 className="font-mono text-[11px] tracking-[0.12em] text-muted">CIRCUIT IR</h2>
         <span
-          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-            program ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"
+          className={`rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${
+            program ? "bg-ok/15 text-ok" : "bg-err/15 text-err"
           }`}
         >
           {program ? "valid" : "invalid"}
@@ -51,7 +51,7 @@ export function IrPanel({ onClose }: { onClose: () => void }) {
         Blocks and the IR are the same program. Edit the blocks and this updates live.
       </p>
       <pre className="flex-1 overflow-auto px-4 py-3 font-mono text-[11.5px] leading-relaxed text-fg/90">
-        {program ? json : <span className="whitespace-pre-wrap text-red-300">{irError}</span>}
+        {program ? json : <span className="whitespace-pre-wrap text-err">{irError}</span>}
       </pre>
     </motion.section>
   );

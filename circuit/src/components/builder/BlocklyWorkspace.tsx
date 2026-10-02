@@ -2,6 +2,7 @@
 
 import * as Blockly from "blockly/core";
 import { useEffect, useRef } from "react";
+import { registerRailCategory } from "@/lib/blocks/railCategory";
 import { attachWorkspaceCallbacks, registerCircuitBlocks } from "@/lib/blocks/register";
 import { createCircuitTheme } from "@/lib/blocks/theme";
 import { buildToolbox } from "@/lib/blocks/toolbox";
@@ -15,9 +16,11 @@ export default function BlocklyWorkspace() {
     const el = host.current;
     if (!el) return;
     registerCircuitBlocks();
+    registerRailCategory();
 
     const ws = Blockly.inject(el, {
       renderer: "zelos",
+      media: "/blockly/media/",
       theme: createCircuitTheme(),
       toolbox: buildToolbox(),
       grid: { spacing: 28, length: 2, colour: "#1d2333", snap: false },

@@ -40,10 +40,12 @@ export function ProjectMenu() {
     fn();
   };
 
-  const item = "flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm text-fg hover:bg-white/5";
+  const item = "flex w-full items-center rounded-md px-3 py-1.5 text-left font-sans text-[13px] text-fg hover:bg-white/5";
 
   return (
-    <div ref={root} className="relative flex items-center">
+    <div ref={root} className="relative flex min-w-0 items-center font-mono text-[12px]">
+      <span className="shrink-0 text-dim">you</span>
+      <span className="shrink-0 px-1.5 text-faint">/</span>
       <input
         aria-label="Project name"
         value={draft ?? current?.name ?? ""}
@@ -60,33 +62,34 @@ export function ProjectMenu() {
             requestAnimationFrame(() => (document.activeElement as HTMLElement)?.blur());
           }
         }}
-        className="w-48 truncate rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-fg hover:border-line focus:border-accent focus:outline-none"
+        className="min-w-[2ch] max-w-56 truncate rounded border-b border-transparent bg-transparent text-[oklch(0.88_0.13_80)] [field-sizing:content] hover:border-line-2 focus:border-signal/60 focus:outline-none"
       />
+      <span className="shrink-0 text-faint">.circuit</span>
       <button
         aria-label="Project menu"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="rounded-md p-1.5 text-muted hover:bg-white/5 hover:text-fg"
+        className="ml-0.5 shrink-0 rounded-md p-1 text-dim hover:bg-white/5 hover:text-fg"
       >
-        <ChevronDownIcon />
+        <ChevronDownIcon width={14} height={14} />
       </button>
 
       {open && (
-        <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-line bg-panel p-1 shadow-2xl shadow-black/50">
+        <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-line-2 bg-panel p-1 shadow-2xl shadow-black/50">
           <button role="menuitem" className={item} onClick={run(actions.newProject)}>New project</button>
           <button role="menuitem" className={item} onClick={run(actions.duplicateProject)}>Duplicate</button>
           <div className="my-1 border-t border-line" />
-          <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">Open</p>
+          <p className="px-3 pb-1 pt-1.5 text-[10.5px] tracking-[0.12em] text-dim">OPEN</p>
           <div className="max-h-56 overflow-y-auto">
             {projects.map((p) => (
               <div key={p.id} className="group flex items-center rounded-md hover:bg-white/5">
                 <button
                   role="menuitem"
                   onClick={run(() => actions.openProject(p.id))}
-                  className="flex min-w-0 flex-1 items-baseline gap-2 px-3 py-1.5 text-left text-sm"
+                  className="flex min-w-0 flex-1 items-baseline gap-2 px-3 py-1.5 text-left font-sans text-[13px]"
                 >
-                  <span className={`truncate ${p.id === current?.id ? "text-accent" : "text-fg"}`}>{p.name}</span>
+                  <span className={`truncate ${p.id === current?.id ? "text-signal" : "text-fg"}`}>{p.name}</span>
                   <span className="ml-auto shrink-0 text-[11px] text-muted">{timeAgo(p.updatedAt)}</span>
                 </button>
                 <button
@@ -94,7 +97,7 @@ export function ProjectMenu() {
                   onClick={() => {
                     if (confirm(`Delete "${p.name}"? This can't be undone.`)) actions.deleteProject(p.id);
                   }}
-                  className="mr-1 rounded p-1 text-muted opacity-0 hover:text-red-400 focus:opacity-100 group-hover:opacity-100"
+                  className="mr-1 rounded p-1 text-muted opacity-0 hover:text-err focus:opacity-100 group-hover:opacity-100"
                 >
                   <TrashIcon width={14} height={14} />
                 </button>
@@ -118,7 +121,7 @@ export function ProjectMenu() {
           <div className="my-1 border-t border-line" />
           <button
             role="menuitem"
-            className={`${item} text-red-300`}
+            className={`${item} text-err`}
             onClick={run(() => {
               if (confirm("Clear every block in this project? You can undo this.")) actions.resetProject();
             })}
