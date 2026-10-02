@@ -141,14 +141,127 @@ body {
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.5) !important;
 }
 
-/* ---- Blocks ---- */
+/* ---- Blocks ----
+   Blockly injects its renderer CSS at runtime, after this sheet, with the same
+   specificity — so overrides of its fill/stroke rules need !important. */
 .circuit-renderer .blocklyText,
 .circuit-renderer .blocklyNonEditableField > text {
-  fill: var(--color-fg);
+  fill: var(--color-fg) !important;
 }
 .circuit-renderer .blocklyPath {
   stroke-width: 1px;
 }
 .circuitBlockTag {
   pointer-events: none;
+}
+
+/* ---- Fields: pills ----
+   Geist Mono has the same advance at every weight, so fields can render at 400
+   while Blockly measures them at the theme's 600 without changing their width. */
+.circuit-renderer .blocklyEditableField > text,
+.circuit-renderer .blocklyEditableField > .blocklyText {
+  fill: var(--color-fg) !important;
+  font-weight: 400 !important;
+}
+
+/* Text inputs and dropdowns on a block. */
+.circuit-renderer .blocklyEditableField > .blocklyFieldRect {
+  fill: var(--color-canvas) !important;
+  fill-opacity: 1 !important;
+  stroke: #35383e !important;
+  stroke-width: 1px !important;
+  rx: 999px;
+  ry: 999px;
+}
+.circuit-renderer .blocklyDraggable .blocklyEditableField:not(.blocklyEditing):hover > .blocklyFieldRect,
+.circuit-renderer .blocklyDraggable .blocklyEditableField:not(.blocklyEditing):hover > .blocklyPath {
+  stroke: #5a5e66 !important;
+  stroke-width: 1px !important;
+}
+.circuit-renderer .blocklyDropdownField image {
+  opacity: 0.55;
+}
+
+/* Shadow blocks (number/text slots) are whole-block pills. */
+.circuit-renderer .blocklyShadow > .blocklyPath {
+  fill: var(--color-canvas) !important;
+  stroke: #35383e !important;
+}
+
+/* Variables read like the design's variable pill. */
+.circuit-renderer .blocklyVariableField > .blocklyFieldRect,
+.circuit-renderer .variables_get > .blocklyPath {
+  fill: oklch(0.29 0.035 235) !important;
+  stroke: oklch(0.42 0.05 235) !important;
+}
+.circuit-renderer .blocklyVariableField > text,
+.circuit-renderer .blocklyVariableField > .blocklyDropdownText {
+  fill: oklch(0.88 0.06 235) !important;
+}
+
+/* Inline text editor. */
+.blocklyWidgetDiv .blocklyHtmlInput {
+  background: var(--color-canvas) !important;
+  color: var(--color-fg) !important;
+  border: 1px solid oklch(0.84 0.15 80 / 0.7) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 3px oklch(0.84 0.15 80 / 0.15) !important;
+  font-family: var(--font-mono), ui-monospace, monospace !important;
+  font-weight: 400 !important;
+  caret-color: var(--color-signal);
+}
+
+/* ---- Dropdowns and menus ---- */
+.blocklyDropDownDiv {
+  background-color: var(--color-raised) !important;
+  border: 1px solid var(--color-line-2) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.55) !important;
+  padding: 4px !important;
+}
+.blocklyDropDownArrow {
+  background-color: var(--color-raised) !important;
+  border-color: var(--color-line-2) !important;
+}
+.blocklyDropDownDiv .blocklyMenu,
+.blocklyWidgetDiv .blocklyMenu {
+  background: var(--color-raised);
+  border: none;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  padding: 0;
+  box-shadow: none;
+}
+.blocklyWidgetDiv .blocklyMenu {
+  border: 1px solid var(--color-line-2);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.55);
+}
+.blocklyDropDownDiv .blocklyMenuItemContent {
+  color: inherit !important;
+}
+.blocklyMenuItem {
+  color: var(--color-fg-2) !important;
+  border-radius: 6px;
+  padding: 5px 14px 5px 28px !important;
+  min-width: 0;
+  min-height: 0 !important;
+  line-height: 18px !important;
+}
+.blocklyMenuItemHighlight {
+  background-color: #ffffff0d !important;
+  color: var(--color-fg) !important;
+}
+.blocklyMenuItemSelected {
+  color: var(--color-fg) !important;
+}
+.blocklyMenuItemSelected .blocklyMenuItemCheckbox {
+  filter: invert(0.85) sepia(1) saturate(4) hue-rotate(5deg);
+}
+.blocklyMenuItemDisabled {
+  color: var(--color-faint) !important;
+}
+.blocklyMenuSeparator {
+  border-color: var(--color-line-2) !important;
 }
