@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LogoMark } from "@/components/site/Logo";
 import { ChevronDownIcon, CodeIcon } from "@/components/ui/icons";
 import { useProjectStore } from "@/store/project";
 import { useRuntimeStore } from "@/store/runtime";
@@ -10,17 +11,6 @@ import { ProjectMenu } from "./ProjectMenu";
 import { RunButton } from "./RunButton";
 
 /** Three-node circuit mark from the design: two outlined nodes and a lit amber one. */
-function LogoMark() {
-  return (
-    <span className="relative inline-flex h-3 items-center gap-[5px]" aria-hidden>
-      <span className="absolute inset-x-0.5 top-1/2 h-px bg-[#4a4d53]" />
-      <span className="relative h-[7px] w-[7px] rounded-[1px] border border-[#c9c7c2] bg-ink" />
-      <span className="relative h-[7px] w-[7px] rounded-[1px] border border-[#c9c7c2] bg-ink" />
-      <span className="relative h-[7px] w-[7px] rounded-[1px] bg-signal shadow-[0_0_8px_var(--color-signal)]" />
-    </span>
-  );
-}
-
 const MODE_LABEL = { prototype: "PROTOTYPE", existing: "EXISTING TOKEN", launch: "LAUNCH PREVIEW" } as const;
 
 const ghostBtn =
@@ -38,20 +28,20 @@ export function BuilderHeader({ panel, onToggle }: { panel: "ir" | "explain" | n
 
   return (
     <header className="relative z-30 flex h-[52px] shrink-0 items-center gap-4 border-b border-[#1d1f23] bg-ink px-4">
-      <div className="flex min-w-[150px] flex-1 basis-0 items-center gap-3">
+      <div className="flex min-w-[150px] flex-1 basis-0 items-center gap-3 overflow-hidden">
         <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="CIRCUIT home">
           <LogoMark />
-          <span className="hidden font-mono text-[13px] font-semibold tracking-[0.18em] xl:inline">CIRCUIT</span>
+          <span className="hidden font-mono text-[13px] font-semibold tracking-[0.18em] min-[1440px]:inline">CIRCUIT</span>
         </Link>
         <span className="h-4 w-px shrink-0 bg-line-2" />
         <ProjectMenu />
-        <span className="hidden shrink-0 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-muted tabular-nums xl:inline">
+        <span className="hidden shrink-0 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-muted tabular-nums min-[1700px]:inline">
           {blocks} {blocks === 1 ? "BLOCK" : "BLOCKS"}
         </span>
         <button
           onClick={() => openDialog("setup")}
           title="Project setup: how this project relates to a token"
-          className="hidden shrink-0 items-center gap-1 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-fg-2 transition-colors hover:border-signal/50 hover:text-fg lg:inline-flex"
+          className="hidden shrink-0 items-center gap-1 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-fg-2 transition-colors hover:border-signal/50 hover:text-fg min-[1540px]:inline-flex"
         >
           <span className="text-dim">TOKEN:</span>
           {MODE_LABEL[launchMode]}
@@ -59,7 +49,7 @@ export function BuilderHeader({ panel, onToggle }: { panel: "ir" | "explain" | n
         </button>
       </div>
 
-      <div className="w-[520px] min-w-[220px] shrink">
+      <div className="w-[min(520px,30vw)] min-w-[200px] shrink">
         <AiBar />
       </div>
 

@@ -98,7 +98,7 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
           CIRCUIT
         </Link>
         <span className="font-mono text-[11px] tracking-[0.1em] text-dim">/p/{view.slug}</span>
-        <Link href="/" className="ml-auto rounded-md border border-line-2 px-3 py-1 font-mono text-[11.5px] text-fg-2 hover:text-fg">
+        <Link href="/build" className="ml-auto rounded-md border border-line-2 px-3 py-1 font-mono text-[11.5px] text-fg-2 hover:text-fg">
           Make your own
         </Link>
       </nav>
