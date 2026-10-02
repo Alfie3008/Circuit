@@ -103,15 +103,14 @@ body {
 }
 
 /* ---- Flyout ---- */
-.circuitFlyoutHeader .blocklyFlyoutLabelText {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  fill: var(--color-muted);
-}
 .blocklyFlyoutLabel .blocklyFlyoutLabelText {
-  fill: var(--color-dim);
-  font-size: 11px;
+  fill: var(--color-dim) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+.circuitFlyoutHeader .blocklyFlyoutLabelText {
+  fill: var(--color-muted) !important;
+  letter-spacing: 0.12em;
 }
 .blocklyFlyoutButtonBackground {
   fill: oklch(0.84 0.15 80 / 0.1);
@@ -182,8 +181,11 @@ body {
   opacity: 0.55;
 }
 
-/* Shadow blocks (number/text slots) are whole-block pills. */
-.circuit-renderer .blocklyShadow > .blocklyPath {
+/* Shadow blocks (number/text slots) and lone number/text reporters are
+   whole-block pills; Zelos would paint them white. */
+.circuit-renderer .blocklyShadow > .blocklyPath,
+.circuit-renderer .data_number > .blocklyPath,
+.circuit-renderer .data_text > .blocklyPath {
   fill: var(--color-canvas) !important;
   stroke: #35383e !important;
 }
@@ -264,4 +266,15 @@ body {
 }
 .blocklyMenuSeparator {
   border-color: var(--color-line-2) !important;
+}
+.circuitHeaderDivider {
+  stroke: #30333a;
+  pointer-events: none;
+}
+/* Empty value inputs: the design's dashed slot. */
+.circuit-renderer .blocklyOutlinePath {
+  fill: transparent !important;
+  stroke: #464a52;
+  stroke-width: 1px;
+  stroke-dasharray: 3 3;
 }

@@ -54,14 +54,10 @@ class CircuitRenderInfo extends Blockly.zelos.RenderInfo {
   }
 }
 
-/** Per-block SVG for the tag, created lazily and reused across renders. */
-const tagNodes = new WeakMap<Blockly.BlockSvg, SVGGElement>();
-
+/** SVG for a block's category tag. */
 function tagNode(block: Blockly.BlockSvg, cat: CategoryMeta, family: string): SVGGElement {
-  let g = tagNodes.get(block);
-  if (g && g.parentNode === block.getSvgRoot()) return g;
   const { Svg } = Blockly.utils;
-  g = Blockly.utils.dom.createSvgElement(Svg.G, { class: "circuitBlockTag" }, block.getSvgRoot());
+  const g = Blockly.utils.dom.createSvgElement(Svg.G, { class: "circuitBlockTag" }, block.getSvgRoot());
   Blockly.utils.dom.createSvgElement(
     Svg.RECT,
     { rx: TAG.radius, ry: TAG.radius, fill: "none", stroke: hueColour(cat.hue, 0.5, 0.06), "stroke-width": 1 },
@@ -81,8 +77,67 @@ function tagNode(block: Blockly.BlockSvg, cat: CategoryMeta, family: string): SV
     g,
   );
   text.textContent = cat.code;
-  tagNodes.set(block, g);
   return g;
+}
+
+/**
+ * Flatter Zelos: smaller connection tabs, 6px corners, 22px pills and tighter
+ * rows, following the design's block metrics.
+ */
+class CircuitConstants extends Blockly.zelos.ConstantProvider {
+  constructor() {
+    super();
+    this.CORNER_RADIUS = 6;
+    this.TOP_ROW_MIN_HEIGHT = this.CORNER_RADIUS;
+    this.BOTTOM_ROW_MIN_HEIGHT = this.CORNER_RADIUS;
+    this.NOTCH_WIDTH = 24;
+    this.NOTCH_HEIGHT = 6;
+    this.NOTCH_OFFSET_LEFT = 16;
+    this.STATEMENT_BOTTOM_SPACER = -this.NOTCH_HEIGHT;
+    this.MIN_BLOCK_HEIGHT = 36;
+    this.START_HAT_HEIGHT = 12;
+    this.START_HAT_WIDTH = 80;
+    this.TOP_ROW_PRECEDES_STATEMENT_MIN_HEIGHT = 8;
+    this.BOTTOM_ROW_AFTER_STATEMENT_MIN_HEIGHT = 14;
+    this.EMPTY_STATEMENT_INPUT_HEIGHT = 20;
+    this.STATEMENT_INPUT_PADDING_LEFT = 16;
+    this.EMPTY_INLINE_INPUT_HEIGHT = 22;
+    this.EMPTY_INLINE_INPUT_PADDING = 28;
+    this.DUMMY_INPUT_MIN_HEIGHT = 24;
+    this.DUMMY_INPUT_SHADOW_MIN_HEIGHT = 22;
+    this.FIELD_BORDER_RECT_X_PADDING = 9;
+    this.FIELD_DROPDOWN_SVG_ARROW_PADDING = 7;
+    this.MAX_DYNAMIC_CONNECTION_SHAPE_WIDTH = 28;
+    this.SELECTED_GLOW_SIZE = 0.4;
+  }
+
+  /** Pills are 22px tall whatever the font metrics say. */
+  override setFontConstants_(theme: Blockly.Theme): void {
+    super.setFontConstants_(theme);
+    this.FIELD_BORDER_RECT_HEIGHT = 22;
+    this.FIELD_DROPDOWN_BORDER_RECT_HEIGHT = 22;
+  }
+}
+
+/** Per-block SVG decorations (tag, header divider), created once and reused. */
+const decorations = new WeakMap<Blockly.BlockSvg, Map<string, SVGElement>>();
+
+function decoration<T extends SVGElement>(block: Blockly.BlockSvg, key: string, create: () => T): T {
+  let byKey = decorations.get(block);
+  if (!byKey) decorations.set(block, (byKey = new Map()));
+  const existing = byKey.get(key);
+  if (existing && existing.parentNode === block.getSvgRoot()) return existing as T;
+  const el = create();
+  byKey.set(key, el);
+  return el;
+}
+
+function removeDecoration(block: Blockly.BlockSvg, key: string) {
+  const el = decorations.get(block)?.get(key);
+  if (el) {
+    el.remove();
+    decorations.get(block)!.delete(key);
+  }
 }
 
 class CircuitDrawer extends Blockly.zelos.Drawer {
@@ -91,37 +146,68 @@ class CircuitDrawer extends Blockly.zelos.Drawer {
     const block = this.block_;
     const cat = categoryOf(block);
     if (!cat) return;
-
-    let tag: { elem: TagMeasurable } | undefined;
-    for (const row of this.info_.rows) {
-      const elem = row.elements.find(isTag);
-      if (elem) tag = { elem };
-    }
-    if (tag) {
-      const { elem } = tag;
-      const g = tagNode(block, cat, this.constants_.FIELD_TEXT_FONTFAMILY);
-      const y = elem.centerline - elem.height / 2; // centerline is block-relative
-      g.setAttribute("transform", `translate(${elem.xPos},${y})`);
-      const rect = g.firstChild as SVGRectElement;
-      rect.setAttribute("x", "0.5");
-      rect.setAttribute("y", "0.5");
-      rect.setAttribute("width", String(elem.width - 1));
-      rect.setAttribute("height", String(elem.height - 1));
-      const text = g.lastChild as SVGTextElement;
-      text.setAttribute("x", String(elem.width / 2));
-      text.setAttribute("y", String(elem.height / 2));
-    }
+    this.drawTag_(cat);
+    this.drawHeaderDivider_();
 
     // Reporters: highlight the leading keyword (RANDOM, AI, …) in the category colour.
     if (block.outputConnection && !block.isShadow()) {
       const label = block.inputList[0]?.fieldRow.find((f) => f instanceof Blockly.FieldLabel);
       const text = label?.getSvgRoot()?.querySelector("text");
-      if (text) text.style.fill = hueColour(cat.hue, 0.84, 0.08);
+      text?.style.setProperty("fill", hueColour(cat.hue, 0.84, 0.08), "important");
     }
+  }
+
+  private drawTag_(cat: CategoryMeta) {
+    let elem: TagMeasurable | undefined;
+    for (const row of this.info_.rows) elem = row.elements.find(isTag) ?? elem;
+    if (!elem) return removeDecoration(this.block_, "tag");
+
+    const g = decoration(this.block_, "tag", () => tagNode(this.block_, cat, this.constants_.FIELD_TEXT_FONTFAMILY));
+    const y = elem.centerline - elem.height / 2; // centerline is block-relative
+    g.setAttribute("transform", `translate(${elem.xPos},${y})`);
+    const rect = g.firstChild as SVGRectElement;
+    rect.setAttribute("x", "0.5");
+    rect.setAttribute("y", "0.5");
+    rect.setAttribute("width", String(elem.width - 1));
+    rect.setAttribute("height", String(elem.height - 1));
+    const text = g.lastChild as SVGTextElement;
+    text.setAttribute("x", String(elem.width / 2));
+    text.setAttribute("y", String(elem.height / 2));
+  }
+
+  /**
+   * Dashed rule between a block's header row and the rows under it (the
+   * design's config section), e.g. CREATE AGENT. Not drawn above a statement
+   * input: C-blocks already separate their header with the mouth.
+   */
+  private drawHeaderDivider_() {
+    const rows = this.info_.rows;
+    const inputRows = rows.filter((r) => Types.isInputRow(r));
+    const [header, next] = inputRows;
+    const show = !this.block_.isCollapsed() && !this.block_.outputConnection && header && next && !next.hasStatement;
+    if (!show) return removeDecoration(this.block_, "divider");
+
+    const spacer = rows[rows.indexOf(header) + 1];
+    const y = Math.round(spacer.yPos + spacer.height / 2) + 0.5;
+    const line = decoration(this.block_, "divider", () =>
+      Blockly.utils.dom.createSvgElement(
+        Blockly.utils.Svg.LINE,
+        { class: "circuitHeaderDivider", "stroke-dasharray": "3 3", "stroke-width": 1 },
+        this.block_.getSvgRoot(),
+      ),
+    );
+    line.setAttribute("x1", "1");
+    line.setAttribute("x2", String(this.info_.width - 1));
+    line.setAttribute("y1", String(y));
+    line.setAttribute("y2", String(y));
   }
 }
 
 class CircuitRenderer extends Blockly.zelos.Renderer {
+  protected override makeConstants_(): CircuitConstants {
+    return new CircuitConstants();
+  }
+
   protected override makeRenderInfo_(block: Blockly.BlockSvg): CircuitRenderInfo {
     return new CircuitRenderInfo(this, block);
   }
@@ -136,7 +222,7 @@ class CircuitRenderer extends Blockly.zelos.Renderer {
 
 let registered = false;
 
-/** Registers the CIRCUIT renderer (Zelos plus category tags). Client-only. */
+/** Registers the CIRCUIT renderer (flatter Zelos plus category tags). Client-only. */
 export function registerCircuitRenderer() {
   if (registered) return;
   registered = true;
