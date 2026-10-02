@@ -35,7 +35,8 @@ export interface Proof {
 
 export interface CircuitEvent {
   type: EventKind;
-  source: "simulator" | "runtime" | "live";
+  /** simulator: made up · runtime: raised by the program · live: on chain · schedule: the server's clock. */
+  source: "simulator" | "runtime" | "live" | "schedule";
   timestamp: number;
   data: Record<string, Value>;
   /** Set for live events: the transaction that caused it. */

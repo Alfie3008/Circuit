@@ -94,6 +94,9 @@ export function BuilderHeader({ panel, onToggle }: { panel: "ir" | "explain" | n
         <button className={ghostBtn} onClick={flush} title="Projects autosave. Save writes immediately.">
           Save
         </button>
+        <button className={ghostBtn} onClick={() => openDialog("publish")} title="Give this project a public page, and run it on the server">
+          Publish
+        </button>
         <RunButton />
       </div>
     </header>

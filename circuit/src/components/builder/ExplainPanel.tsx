@@ -3,33 +3,9 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { XIcon } from "@/components/ui/icons";
-import { explainProgram, toText, type Part } from "@/lib/explain/explain";
+import { Words } from "@/components/runtime/Words";
+import { explainProgram, toText } from "@/lib/explain/explain";
 import { markBlock, useProjectStore } from "@/store/project";
-
-function Words({ parts }: { parts: Part[] }) {
-  return (
-    <>
-      {parts.map((p, i) =>
-        "text" in p ? (
-          <span key={i}>{p.text} </span>
-        ) : (
-          <span
-            key={i}
-            className={`mr-1 inline-block rounded-full border px-1.5 font-mono text-[12px] leading-[19px] ${
-              p.kind === "var"
-                ? "border-[oklch(0.42_0.05_235)] bg-[oklch(0.29_0.035_235)] text-var"
-                : p.kind === "event"
-                  ? "border-ok/40 text-ok"
-                  : "border-line-2 bg-canvas text-fg"
-            }`}
-          >
-            {p.value}
-          </span>
-        ),
-      )}
-    </>
-  );
-}
 
 /** The program as plain English, linked to the blocks it describes. */
 export function ExplainPanel({ onClose }: { onClose: () => void }) {

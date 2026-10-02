@@ -7,16 +7,26 @@ import { aiPost, errorText } from "@/lib/ai/client";
 import type { RuntimeOp } from "@/lib/ai/runtime";
 import type { AiAdapter } from "./adapters";
 
+/** Sends one op somewhere that runs it (the /api/ai route, or the model directly on the server). */
+export type OpSender = (op: RuntimeOp) => Promise<unknown>;
+
 export function remoteAi(mock: AiAdapter, model: string, onFallback?: (reason: string) => void): AiAdapter {
+  return opAi(mock, model, async (op) => {
+    const res = await aiPost("/api/ai", op);
+    if (!res.ok) throw new Error(await errorText(res));
+    return ((await res.json()) as { result: unknown }).result;
+  }, onFallback);
+}
+
+/** An AI adapter that sends each call as an op, falling back to `mock` per call. */
+export function opAi(mock: AiAdapter, model: string, send: OpSender, onFallback?: (reason: string) => void): AiAdapter {
   let label = model;
 
   async function call<T>(op: RuntimeOp, fallback: () => Promise<T>): Promise<T> {
     try {
-      const res = await aiPost("/api/ai", op);
-      if (!res.ok) throw new Error(await errorText(res));
-      const body = (await res.json()) as { result: T };
+      const result = (await send(op)) as T;
       label = model;
-      return body.result;
+      return result;
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       label = `mock (fell back: ${reason})`;

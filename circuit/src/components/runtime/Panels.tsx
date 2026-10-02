@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { Agent, Receipt, RuntimeState } from "@/lib/runtime/state";
-import { useRuntimeStore } from "@/store/runtime";
 import { artFor, clock, num, runNo, show } from "./format";
 
 const mono = "font-mono text-[11px] tracking-[0.12em]";
@@ -89,8 +88,7 @@ function Rows({ title, rows, tag }: { title: string; rows: [string, string][]; t
   );
 }
 
-export function StatePanel({ state }: { state: RuntimeState }) {
-  const reset = useRuntimeStore((s) => s.resetState);
+export function StatePanel({ state, onReset }: { state: RuntimeState; onReset?: () => void }) {
   const vars = Object.entries(state.variables).map(([k, v]) => [k, show(v, state)] as [string, string]);
   return (
     <div className="flex flex-col">
@@ -123,15 +121,17 @@ export function StatePanel({ state }: { state: RuntimeState }) {
         title="BOUNTIES"
         rows={state.bounties.map((b) => [b.title, `${b.status} · ${b.submissions.length} subs · ${num(b.reward)} SOL`] as [string, string])}
       />
-      <button
-        onClick={() => {
-          if (confirm("Reset runtime state? Variables, agents, world, feed, treasury and receipts go back to the start. Your blocks are not touched."))
-            reset();
-        }}
-        className="mt-2 self-start rounded-md border border-line-2 px-2.5 py-1 font-mono text-[11px] tracking-[0.06em] text-dim hover:border-err/60 hover:text-err"
-      >
-        RESET STATE
-      </button>
+      {onReset && (
+        <button
+          onClick={() => {
+            if (confirm("Reset runtime state? Variables, agents, world, feed, treasury and receipts go back to the start. Your blocks are not touched."))
+              onReset();
+          }}
+          className="mt-2 self-start rounded-md border border-line-2 px-2.5 py-1 font-mono text-[11px] tracking-[0.06em] text-dim hover:border-err/60 hover:text-err"
+        >
+          RESET STATE
+        </button>
+      )}
     </div>
   );
 }
@@ -239,7 +239,7 @@ export function Source({ r }: { r: Receipt }) {
         </span>
       </div>
     );
-  const label = r.event.source === "runtime" ? "RAISED BY THE PROGRAM" : "SIMULATED EVENT";
+  const label = r.event.source === "runtime" ? "RAISED BY THE PROGRAM" : r.event.source === "schedule" ? "SCHEDULED · SERVER CLOCK" : "SIMULATED EVENT";
   return (
     <div className="flex items-center gap-1.5 border-b border-dashed border-[#2f3237] px-4 py-2 text-[10.5px] tracking-[0.1em] text-[oklch(0.88_0.13_80)]/80">
       <span className="h-1.5 w-1.5 rounded-full bg-signal/80" />

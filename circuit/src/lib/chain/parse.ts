@@ -35,6 +35,8 @@ export interface RpcTransaction {
     preTokenBalances?: TokenBalance[];
     postTokenBalances?: TokenBalance[];
     logMessages?: string[] | null;
+    /** Address-lookup-table accounts ("json" encoding lists them here, not in accountKeys). */
+    loadedAddresses?: { writable: string[]; readonly: string[] } | null;
   } | null;
   transaction: {
     signatures: string[];
@@ -46,6 +48,24 @@ export const solscanTx = (signature: string) => `https://solscan.io/tx/${signatu
 export const solscanAccount = (address: string) => `https://solscan.io/account/${address}`;
 
 const key = (k: AccountKey) => (typeof k === "string" ? k : k.pubkey);
+
+/** Every account, in balance order (static keys, then lookup-table ones if listed separately). */
+export function accountKeys(tx: RpcTransaction): string[] {
+  const keys = tx.transaction.message.accountKeys.map(key);
+  const loaded = tx.meta?.loadedAddresses;
+  if (loaded && keys.length < (tx.meta?.preBalances.length ?? 0)) keys.push(...loaded.writable, ...loaded.readonly);
+  return keys;
+}
+
+/** Addresses a transaction involves: accounts, plus mints and owners of token balances. */
+export function involvedAddresses(tx: RpcTransaction): Set<string> {
+  const out = new Set(accountKeys(tx));
+  for (const b of [...(tx.meta?.preTokenBalances ?? []), ...(tx.meta?.postTokenBalances ?? [])]) {
+    out.add(b.mint);
+    if (b.owner) out.add(b.owner);
+  }
+  return out;
+}
 const round = (n: number, places = 9) => Math.round(n * 10 ** places) / 10 ** places;
 
 /** UI-unit change in `owner`'s balance of `mint` across the transaction. */
@@ -75,7 +95,7 @@ export interface ParseOptions {
  */
 export function parseTransaction(tx: RpcTransaction, opts: ParseOptions): CircuitEvent[] {
   if (!tx.meta || tx.meta.err) return [];
-  const keys = tx.transaction.message.accountKeys.map(key);
+  const keys = accountKeys(tx);
   const signer = keys[0];
   const signature = tx.transaction.signatures[0];
   const timestamp = (tx.blockTime ?? Math.floor(Date.now() / 1000)) * 1000;

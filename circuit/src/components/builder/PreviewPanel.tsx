@@ -13,6 +13,7 @@ type Tab = (typeof TABS)[number];
 export function PreviewPanel() {
   const [tab, setTab] = useState<Tab>("World");
   const state = useRuntimeStore((s) => s.state);
+  const resetState = useRuntimeStore((s) => s.resetState);
 
   return (
     <aside className="flex w-[340px] shrink-0 flex-col border-l border-line bg-panel">
@@ -35,7 +36,7 @@ export function PreviewPanel() {
       </nav>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
         {tab === "World" && <WorldPanel state={state} />}
-        {tab === "State" && <StatePanel state={state} />}
+        {tab === "State" && <StatePanel state={state} onReset={resetState} />}
         {tab === "Agents" && <AgentsPanel state={state} />}
         {tab === "Feed" && <FeedPanel state={state} />}
         {tab === "Runs" && <RunsPanel state={state} />}

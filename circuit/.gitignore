@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local server data (npm run dev without DATABASE_URL)
+/.circuit-data

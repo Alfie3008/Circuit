@@ -103,7 +103,7 @@ export async function getSolUsd(f: Fetcher = fetch): Promise<{ value: number; so
 }
 
 /** Runs `fn` over items with at most `n` in flight. */
-async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+export async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let i = 0;
   await Promise.all(
