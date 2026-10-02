@@ -24,7 +24,7 @@ const world = category("world", "website", [
     ir: "create_entity",
     shape: "statement",
     rows: [
-      row("create entity of type", text("TYPE", "item")),
+      row("create entity of type", text("ENTITY_TYPE", "item")),
       row("name", textIn("NAME", "Thing")),
       row("properties", objIn("PROPS")),
       row("image", anyIn("IMAGE", "📦")),

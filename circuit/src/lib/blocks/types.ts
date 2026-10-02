@@ -46,11 +46,23 @@ export type Shape =
 
 export type FieldSpec =
   | { kind: "label"; text: string }
-  | { kind: "text"; name: string; value: string }
+  | { kind: "text"; name: string; value: string; format?: TextFormat; hideWhen?: HideWhen }
   | { kind: "number"; name: string; value: number; min?: number; max?: number; precision?: number }
   | { kind: "dropdown"; name: string; options: [label: string, value: string][] }
   | { kind: "checkbox"; name: string; value: boolean }
   | { kind: "variable"; name: string; variable: string };
+
+/**
+ * How a text field's value appears in the IR. "list": "a, b, 3" ⇄ ["a","b",3].
+ * "pairs": "k=v, n=1" ⇄ { k: "v", n: 1 }.
+ */
+export type TextFormat = "list" | "pairs";
+
+/** Hide this field while a dropdown on the same block has one of these values. */
+export interface HideWhen {
+  field: string;
+  values: string[];
+}
 
 /** Default block placed into a value input in the toolbox. */
 export interface InputDefault {
@@ -97,7 +109,11 @@ export interface BlockSpec {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
 export const label = (text: string): FieldSpec => ({ kind: "label", text });
-export const text = (name: string, value = ""): FieldSpec => ({ kind: "text", name, value });
+export const text = (
+  name: string,
+  value = "",
+  opts: { format?: TextFormat; hideWhen?: HideWhen } = {},
+): FieldSpec => ({ kind: "text", name, value, ...opts });
 export const num = (
   name: string,
   value = 0,

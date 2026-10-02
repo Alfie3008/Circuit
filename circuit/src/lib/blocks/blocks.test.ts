@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { BLOCKS, getBlockSpec } from ".";
 import { toBlocklyJson } from "./blocklyJson";
 import { CATEGORIES } from "./categories";
+import { HIDE_FIELDS_EXTENSION, registerExtensions } from "./extensions";
 import { STARTER_PROGRAM } from "./starter";
 import { buildToolbox, toolboxEntry, variablesFlyout } from "./toolbox";
 import type { InputSpec } from "./types";
@@ -55,6 +56,7 @@ describe("Blockly integration (headless)", () => {
   let ws: Blockly.Workspace;
 
   beforeAll(() => {
+    registerExtensions();
     Blockly.common.defineBlocksWithJsonArray(BLOCKS.map(toBlocklyJson));
   });
 
@@ -111,12 +113,30 @@ describe("Blockly integration (headless)", () => {
     expect(fits("agents_run", "AGENT", "variables_get")).toBe(true);
   });
 
+  it("hides a text box while its mode is AI generated, keeping the value", () => {
+    const w = fresh();
+    const agent = w.newBlock("agents_create");
+    expect(toBlocklyJson(getBlockSpec("agents_create")!).extensions).toEqual([HIDE_FIELDS_EXTENSION]);
+    expect(agent.getField("NAME")!.isVisible()).toBe(false); // default mode: AI generated
+    agent.setFieldValue("manual", "NAME_MODE");
+    expect(agent.getField("NAME")!.isVisible()).toBe(true);
+    agent.setFieldValue("Bongo", "NAME");
+    agent.setFieldValue("ai_generated", "NAME_MODE");
+    expect(agent.getField("NAME")!.isVisible()).toBe(false);
+    expect(agent.getFieldValue("NAME")).toBe("Bongo");
+    // Species defaults to "random from list" → list stays visible; visual hides for placeholder.
+    expect(agent.getField("SPECIES")!.isVisible()).toBe(true);
+    expect(agent.getField("VISUAL")!.isVisible()).toBe(false);
+    agent.setFieldValue("emoji", "VISUAL_MODE");
+    expect(agent.getField("VISUAL")!.isVisible()).toBe(true);
+  });
+
   it("builds a toolbox with every category and a dynamic Variables flyout", () => {
     const tb = buildToolbox() as { contents: { name: string; custom?: string }[] };
     expect(tb.contents.map((c) => c.name)).toEqual(CATEGORIES.map((c) => c.name));
     expect(tb.contents.find((c) => c.name === "Variables")?.custom).toBe("CIRCUIT_VARIABLES");
     const flyout = variablesFlyout([{ id: "v1", name: "score" }]);
-    expect(flyout[0]).toMatchObject({ kind: "button" });
+    expect(flyout.find((f) => f.kind === "button")).toMatchObject({ callbackkey: "CIRCUIT_CREATE_VARIABLE" });
     expect(flyout.filter((f) => "type" in f && f.type === "variables_get")).toHaveLength(1);
   });
 });

@@ -1,5 +1,8 @@
 import type { BlockSpec, FieldSpec, InputSpec } from "./types";
 
+/** Extension that hides mode-dependent text boxes (registered in extensions.ts). */
+export const HIDE_FIELDS_EXTENSION = "circuit_hide_fields";
+
 /** Blockly JSON for one field or input. */
 function arg(item: FieldSpec | InputSpec): Record<string, unknown> {
   switch (item.kind) {
@@ -47,6 +50,10 @@ export function toBlocklyJson(spec: BlockSpec): Record<string, unknown> {
     def[`message${i}`] = args.map((_, j) => `%${j + 1}`).join(" ");
     def[`args${i}`] = args;
   });
+
+  if (spec.rows.some((r) => r.items.some((i) => i.kind === "text" && i.hideWhen))) {
+    def.extensions = [HIDE_FIELDS_EXTENSION];
+  }
 
   switch (spec.shape) {
     case "hat":

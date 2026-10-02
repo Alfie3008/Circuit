@@ -46,7 +46,7 @@ export function buildToolbox(): Blockly.utils.toolbox.ToolboxDefinition {
 }
 
 /**
- * Flyout contents for the Variables category: a "Make a variable" button, a
+ * Flyout contents for the Variables category: a "New variable" button, a
  * getter per existing variable, then the variable statements bound to the first one.
  */
 export function variablesFlyout(variables: { id: string; name: string }[]): Blockly.utils.toolbox.FlyoutItemInfoArray {
@@ -54,7 +54,9 @@ export function variablesFlyout(variables: { id: string; name: string }[]): Bloc
   const getter = varBlocks.find((b) => b.type === "variables_get")!;
   const first = variables[0];
   return [
-    { kind: "button", text: "Make a variable", callbackkey: CREATE_VARIABLE_BUTTON },
+    { kind: "label", text: "Variables keep their values between runs" },
+    { kind: "button", text: "+ New variable", callbackkey: CREATE_VARIABLE_BUTTON, "web-class": "circuitNewVariable" },
+    { kind: "sep", gap: 16 },
     ...variables.map((v) => toolboxEntry(getter, { VAR: { id: v.id } })),
     { kind: "sep", gap: 24 },
     ...varBlocks

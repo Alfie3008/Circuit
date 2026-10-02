@@ -44,7 +44,7 @@ const data = category("data", "core", [
     ir: "list",
     shape: "reporter",
     output: ["List"],
-    rows: [row("list", text("ITEMS", "a, b, c"))],
+    rows: [row("list", text("ITEMS", "a, b, c", { format: "list" }))],
     tooltip: "A list of comma-separated items. Numbers stay numbers.",
   },
   {
@@ -52,7 +52,7 @@ const data = category("data", "core", [
     ir: "object",
     shape: "reporter",
     output: ["Object"],
-    rows: [row("object", text("PAIRS", "key=value, score=1"))],
+    rows: [row("object", text("PAIRS", "key=value, score=1", { format: "pairs" }))],
     tooltip: "An object written as key=value pairs.",
   },
   {

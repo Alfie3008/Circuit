@@ -14,6 +14,10 @@ import {
   type BlockSpec,
 } from "../types";
 
+/** A "<mode> [text]" pair whose text box hides when the mode needs no text. */
+const modeText = (mode: string, name: string, value: string, hide: string[] = ["ai_generated"]) =>
+  text(name, value, { hideWhen: { field: mode, values: hide } });
+
 /**
  * Agents are generic. A "rat" is CREATE AGENT with species = rat; a researcher
  * is CREATE AGENT with goal = research. There are no species-specific blocks.
@@ -25,11 +29,11 @@ const agents = category("agents", "ai", [
     shape: "statement",
     rows: [
       row("create agent"),
-      row("name", dropdown("NAME_MODE", ["AI generated", "manual"]), text("NAME", "")),
-      row("identity", dropdown("IDENTITY_MODE", ["AI generated", "custom"]), text("IDENTITY", "")),
-      row("species / type", dropdown("SPECIES_MODE", ["random from list", "free text", "AI generated"]), text("SPECIES", "cat, frog, penguin, raccoon, dog, capybara")),
-      row("personality", dropdown("PERSONALITY_MODE", ["AI generated", "free text"]), text("PERSONALITY", "")),
-      row("visual", dropdown("VISUAL_MODE", ["generated placeholder", "emoji", "image URL", "AI generated later"]), text("VISUAL", "")),
+      row("name", dropdown("NAME_MODE", ["AI generated", "manual"]), modeText("NAME_MODE", "NAME", "")),
+      row("identity", dropdown("IDENTITY_MODE", ["AI generated", "custom"]), modeText("IDENTITY_MODE", "IDENTITY", "")),
+      row("species / type", dropdown("SPECIES_MODE", ["random from list", "free text", "AI generated"]), modeText("SPECIES_MODE", "SPECIES", "cat, frog, penguin, raccoon, dog, capybara")),
+      row("personality", dropdown("PERSONALITY_MODE", ["AI generated", "free text"]), modeText("PERSONALITY_MODE", "PERSONALITY", "")),
+      row("visual", dropdown("VISUAL_MODE", ["generated placeholder", "emoji", "image URL", "AI generated later"]), modeText("VISUAL_MODE", "VISUAL", "", ["generated_placeholder", "ai_generated_later"])),
       row("goal", text("GOAL", "")),
       row("model", text("MODEL", "default"), "memory", checkbox("MEMORY", true)),
       row("budget", num("BUDGET", 0, { min: 0 }), "score", num("SCORE", 0)),

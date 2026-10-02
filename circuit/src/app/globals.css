@@ -18,6 +18,13 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Tailwind's preflight sets `svg { display: block }`, which beats SVG presentation
+   attributes. Blockly hides scrollbars etc. with display="none" — honour it, or a
+   closed flyout's scrollbar stays on screen and swallows clicks. */
+[display="none"] {
+  display: none;
+}
+
 /* ---- Blockly chrome tuned to the dark UI ---- */
 .blocklyToolbox {
   padding-top: 6px;
@@ -43,6 +50,13 @@ body {
 .blocklyFlyoutButton .blocklyText {
   fill: #ffffff;
   font-weight: 600;
+}
+.circuitNewVariable .blocklyText {
+  font-size: 14px;
+}
+.blocklyFlyoutLabel .blocklyFlyoutLabelText {
+  fill: #8a93a8;
+  font-size: 11px;
 }
 .blocklyTooltipDiv {
   background: #1b2130 !important;
