@@ -290,3 +290,7 @@ body {
   stroke-width: 1.5px !important;
   filter: drop-shadow(0 0 6px oklch(0.68 0.19 25 / 0.55));
 }
+.circuit-renderer .circuitHover > .blocklyPath {
+  stroke: var(--color-var) !important;
+  stroke-width: 1.5px !important;
+}

@@ -46,6 +46,10 @@ export default function BlocklyWorkspace() {
       const { attach, detach, flush, workspaceChanged } = useProjectStore.getState();
       attach(ws); // loads the current project (or creates the first one)
       ws.addChangeListener(workspaceChanged);
+      ws.addChangeListener((e) => {
+        if (e.type === Blockly.Events.SELECTED)
+          useProjectStore.setState({ selectedBlockId: (e as Blockly.Events.Selected).newElementId ?? null });
+      });
 
       // Light up the block that is running (and the one that failed).
       const unsubRuntime = useRuntimeStore.subscribe((s, prev) => {

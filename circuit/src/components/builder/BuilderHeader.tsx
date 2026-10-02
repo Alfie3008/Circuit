@@ -26,7 +26,8 @@ const MODE_LABEL = { prototype: "PROTOTYPE", existing: "EXISTING TOKEN", launch:
 const ghostBtn =
   "inline-flex h-[30px] items-center gap-2 whitespace-nowrap rounded-md border border-line-2 bg-panel px-3 font-mono text-xs tracking-[0.04em] text-fg-2 transition-colors hover:bg-raised hover:text-fg disabled:cursor-not-allowed disabled:opacity-40";
 
-export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggleIr: () => void }) {
+export function BuilderHeader({ panel, onToggle }: { panel: "ir" | "explain" | null; onToggle: (p: "ir" | "explain") => void }) {
+  const irOpen = panel === "ir";
   const blocks = useProjectStore((s) => s.stats.blocks);
   const valid = useProjectStore((s) => s.program !== null);
   const flush = useProjectStore((s) => s.flush);
@@ -64,7 +65,15 @@ export function BuilderHeader({ irOpen, onToggleIr }: { irOpen: boolean; onToggl
         <UndoRedo />
         <SaveIndicator />
         <button
-          onClick={onToggleIr}
+          onClick={() => onToggle("explain")}
+          aria-pressed={panel === "explain"}
+          title="Read the program as plain English"
+          className={`${ghostBtn} ${panel === "explain" ? "border-signal/55 text-fg" : ""}`}
+        >
+          Explain
+        </button>
+        <button
+          onClick={() => onToggle("ir")}
           aria-pressed={irOpen}
           title="Show the program as Circuit IR"
           className={`${ghostBtn} px-2 ${irOpen ? "border-signal/55 text-fg" : ""}`}

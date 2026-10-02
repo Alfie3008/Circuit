@@ -46,6 +46,8 @@ interface ProjectState {
   canRedo: boolean;
   notice: Notice | null;
   setup: ProjectSetup;
+  /** Block selected on the canvas (for the plain-English view). */
+  selectedBlockId: string | null;
   /** Open dialog, if any. */
   dialog: "templates" | "setup" | null;
 
@@ -99,9 +101,12 @@ export function selectedRootId(): string | null {
 }
 
 /** Lights up a block on the canvas (running / failed), clearing the previous one. */
-export function markBlock(kind: "active" | "error", id: string | null | undefined) {
+const MARK_CLASS = { active: "circuitActive", error: "circuitError", hover: "circuitHover" } as const;
+
+/** Lights up a block on the canvas (running / failed / pointed at), clearing the previous one. */
+export function markBlock(kind: keyof typeof MARK_CLASS, id: string | null | undefined) {
   if (!ws) return;
-  const cls = kind === "active" ? "circuitActive" : "circuitError";
+  const cls = MARK_CLASS[kind];
   for (const el of ws.getParentSvg().querySelectorAll(`.${cls}`)) el.classList.remove(cls);
   const block = id ? ws.getBlockById(id) : null;
   block?.getSvgRoot().classList.add(cls);
@@ -224,6 +229,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     canRedo: false,
     notice: null,
     setup: DEFAULT_SETUP,
+    selectedBlockId: null,
     dialog: null,
 
     attach: (workspace) => {
