@@ -11,7 +11,8 @@
 import { create } from "zustand";
 import type { Program } from "@/lib/ir";
 import { fetchAiStatus, type AiStatus } from "@/lib/ai/client";
-import { mockAdapters, mockAi, mockWeb, type Adapters } from "@/lib/runtime/adapters";
+import { fetchChainStatus, remoteChain, type ChainStatus } from "@/lib/chain/client";
+import { mockAdapters, mockAi, mockChain, mockWeb, type Adapters } from "@/lib/runtime/adapters";
 import { remoteAi } from "@/lib/runtime/remoteAi";
 import { begin, finish, trigger } from "@/lib/runtime/engine";
 import { describeHat, marketEvent, presetEvent, simulateFor, type CircuitEvent, type Match, type PresetId } from "@/lib/runtime/events";
@@ -58,6 +59,8 @@ interface RuntimeStore {
   liveSim: boolean;
   /** Real AI availability (from /api/ai); null until known or if unreachable. */
   aiStatus: AiStatus | null;
+  /** Live Solana reads availability (from /api/chain/status). */
+  chainStatus: ChainStatus | null;
 
   load: (projectId: string) => void;
   /** Simulates the event for a script's hat; every script it triggers runs. */
@@ -72,8 +75,8 @@ interface RuntimeStore {
   setView: (view: "console" | "debugger") => void;
   /** Fires a World-panel preset (buy, fees, …) to every script that listens. */
   firePreset: (id: PresetId) => void;
-  /** Fires any normalized event to every script that listens. */
-  fireEvent: (event: CircuitEvent) => void;
+  /** Fires any normalized event to every script that listens. `announce`: say so if nothing listens. */
+  fireEvent: (event: CircuitEvent, announce?: boolean) => void;
   setLiveSim: (on: boolean) => void;
 }
 
@@ -98,15 +101,18 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const noticedFallbacks = new Set<string>();
 
 /** Real Claude for AI blocks when the server has a key; mock answers otherwise. */
-function makeAdapters(rng: Rng, ai: AiStatus | null): Adapters {
-  if (!ai?.enabled) return mockAdapters(rng);
+function makeAdapters(rng: Rng, ai: AiStatus | null, chain: ChainStatus | null): Adapters {
+  const base = mockAdapters(rng);
   return {
-    ai: remoteAi(mockAi(rng), ai.runtimeModel, (reason) => {
-      if (noticedFallbacks.has(reason)) return;
-      noticedFallbacks.add(reason);
-      useProjectStore.getState().notify("error", `AI block used a mock answer: ${reason}`);
-    }),
+    ai: ai?.enabled
+      ? remoteAi(mockAi(rng), ai.runtimeModel, (reason) => {
+          if (noticedFallbacks.has(reason)) return;
+          noticedFallbacks.add(reason);
+          useProjectStore.getState().notify("error", `AI block used a mock answer: ${reason}`);
+        })
+      : base.ai,
     web: mockWeb(rng),
+    chain: chain?.enabled ? remoteChain(mockChain()) : base.chain,
   };
 }
 
@@ -152,7 +158,7 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
   };
 
   const runMatch = async (match: Match, program: Program, rng: Rng) => {
-    const adapters = makeAdapters(rng, get().aiStatus);
+    const adapters = makeAdapters(rng, get().aiStatus, get().chainStatus);
     const { receipt, run } = begin(working, match, {
       rng,
       adapters,
@@ -254,6 +260,7 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
     view: "console",
     liveSim: false,
     aiStatus: null,
+    chainStatus: null,
 
     load: (projectId) => {
       if (get().projectId === projectId) return;
@@ -309,10 +316,10 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
       working.seed = rng.seed;
       get().fireEvent(event);
     },
-    fireEvent: (event) => {
+    fireEvent: (event, announce = true) => {
       const program = runnableProgram();
       if (!program) return;
-      queue.push({ kind: "event", event, program, announce: true });
+      queue.push({ kind: "event", event, program, announce });
       set({ queued: queue.length });
       void pump();
     },
@@ -390,6 +397,7 @@ function liveLoop() {
 if (typeof window !== "undefined") {
   setInterval(liveLoop, 1000);
   void fetchAiStatus().then((aiStatus) => useRuntimeStore.setState({ aiStatus }));
+  void fetchChainStatus().then((chainStatus) => useRuntimeStore.setState({ chainStatus }));
   // Follow the open project; keep state on page hide.
   useProjectStore.subscribe((s, prev) => {
     if (s.current?.id && s.current.id !== prev.current?.id) useRuntimeStore.getState().load(s.current.id);

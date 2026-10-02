@@ -59,6 +59,11 @@ export async function aiPost(url: string, body: unknown, interactive = false): P
   return res;
 }
 
+/** GET with the stored password (chain routes share the AI routes' guard). */
+export function guardedGet(url: string): Promise<Response> {
+  return fetch(url, { headers: { "x-circuit-password": getPassword() }, cache: "no-store" });
+}
+
 /** Error text from an AI route response. */
 export async function errorText(res: Response): Promise<string> {
   try {

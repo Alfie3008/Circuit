@@ -48,9 +48,29 @@ export interface WebAdapter {
   open(url: string): Promise<Page>;
 }
 
+/** Read-only chain access for blocks like WALLET BALANCE. */
+export interface ChainAdapter {
+  readonly label: string;
+  /** SOL balance, or null if it can't be read. */
+  balance(wallet: string): Promise<number | null>;
+}
+
 export interface Adapters {
   ai: AiAdapter;
   web: WebAdapter;
+  chain: ChainAdapter;
+}
+
+/** Deterministic fake balances (per wallet) for simulation. */
+export function mockChain(): ChainAdapter {
+  return {
+    label: "simulated",
+    async balance(wallet) {
+      let h = 0;
+      for (let i = 0; i < wallet.length; i++) h = (h * 31 + wallet.charCodeAt(i)) >>> 0;
+      return Math.round(h % 5000) / 100;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -175,4 +195,4 @@ export function mockWeb(rng: Rng): WebAdapter {
   };
 }
 
-export const mockAdapters = (rng: Rng): Adapters => ({ ai: mockAi(rng), web: mockWeb(rng) });
+export const mockAdapters = (rng: Rng): Adapters => ({ ai: mockAi(rng), web: mockWeb(rng), chain: mockChain() });

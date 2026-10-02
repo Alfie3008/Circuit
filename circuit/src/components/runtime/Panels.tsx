@@ -220,6 +220,34 @@ export function FeedPanel({ state }: { state: RuntimeState }) {
 const statusTone = (s: Receipt["status"]) => (s === "complete" ? "text-ok" : s === "running" ? "text-signal" : s === "stopped" ? "text-muted" : "text-err");
 const statusWord = (s: Receipt["status"]) => (s === "step_limit" ? "STEP LIMIT" : s.toUpperCase());
 
+/** Where the run's trigger came from: a real transaction (with proof) or the simulator. */
+export function Source({ r }: { r: Receipt }) {
+  const proof = r.event.proof;
+  if (proof)
+    return (
+      <div className="flex flex-col gap-1 border-b border-dashed border-[#2f3237] px-4 py-2.5 text-[11.5px] text-fg-2">
+        <span className="flex items-center gap-1.5 tracking-[0.1em] text-ok">
+          <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+          LIVE · SOLANA
+        </span>
+        <span className="flex flex-wrap gap-x-2">
+          <span>tx {proof.signature.slice(0, 4)}…{proof.signature.slice(-4)}</span>
+          <span>· slot {proof.slot.toLocaleString()}</span>
+          <a href={proof.explorer} target="_blank" rel="noreferrer" className="text-[oklch(0.88_0.13_80)] hover:underline" onClick={(e) => e.stopPropagation()}>
+            · Solscan ↗
+          </a>
+        </span>
+      </div>
+    );
+  const label = r.event.source === "runtime" ? "RAISED BY THE PROGRAM" : "SIMULATED EVENT";
+  return (
+    <div className="flex items-center gap-1.5 border-b border-dashed border-[#2f3237] px-4 py-2 text-[10.5px] tracking-[0.1em] text-[oklch(0.88_0.13_80)]/80">
+      <span className="h-1.5 w-1.5 rounded-full bg-signal/80" />
+      {label}
+    </div>
+  );
+}
+
 function ReceiptCard({ r }: { r: Receipt }) {
   const entries = r.entries;
   return (
@@ -228,6 +256,7 @@ function ReceiptCard({ r }: { r: Receipt }) {
         <span>EXECUTION {String(r.id).padStart(4, "0")}</span>
         <span className="text-dim">{clock(r.startedAt)}</span>
       </div>
+      <Source r={r} />
       <div className="px-4 py-2">
         {entries.map((e, i) => (
           <div key={i} className="py-1.5">

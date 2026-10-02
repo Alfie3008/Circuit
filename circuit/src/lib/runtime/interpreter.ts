@@ -1112,7 +1112,10 @@ class Interpreter {
       case "wallet_balance": {
         const wallet = await this.text(node, "wallet");
         if (!wallet || wallet.toLowerCase() === "treasury") return s.treasury.SOL;
-        return round((hash(wallet) % 5000) / 100, 2); // mock read
+        const chain = this.ctx.adapters.chain;
+        const sol = await chain.balance(wallet);
+        note(`Balance of ${wallet.length > 12 ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : wallet}: ${sol === null ? "unavailable" : `${fmt(sol)} SOL`}`, [`Chain: ${chain.label}`]);
+        return sol ?? 0;
       }
       case "treasury":
         return node.asset === "USDC" ? s.treasury.USDC : s.treasury.SOL;

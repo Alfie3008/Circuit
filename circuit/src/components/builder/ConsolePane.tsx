@@ -84,6 +84,11 @@ function ConsoleLog({ state }: { state: RuntimeState }) {
             <span className="shrink-0 text-faint">{clock(r.startedAt)}</span>
             <span className="shrink-0 text-dim">{runNo(r.id)}</span>
             <span className="text-fg">{r.event.label}</span>
+            {r.event.proof && (
+              <a href={r.event.proof.explorer} target="_blank" rel="noreferrer" className="shrink-0 text-ok hover:underline" title="Open the transaction on Solscan">
+                LIVE ↗
+              </a>
+            )}
             <span className={`ml-auto shrink-0 ${statusColour(r.status)}`}>
               {STATUS_TEXT[r.status]} · {plural(r.status === "running" ? r.entries.length - 1 : r.steps, "step")}
             </span>
