@@ -703,6 +703,13 @@ class Interpreter {
         };
         bounty.submissions.push(submission);
         this.log(`Submission received (simulated) from ${submission.wallet}`, [], { simulated: true });
+        // Scripts listening for "when bounty submission arrives" handle it next.
+        this.ctx.raise?.({
+          type: "bounty_submission",
+          source: "runtime",
+          timestamp: this.now(),
+          data: { submission: ref("submission", submission.id), bounty: ref("bounty", bounty.id), wallet: submission.wallet },
+        });
         return;
       }
       case "approve_submission":
@@ -915,6 +922,10 @@ class Interpreter {
       case "not":
         return !truthy(await this.input(node, "value"));
       case "exists": {
+        // A variable that was never set doesn't exist (even though it reads as 0).
+        const target = node.value as Expr | null | undefined;
+        if (target && typeof target === "object" && !Array.isArray(target) && target.type === "var" && !(String(target.var) in s.variables))
+          return false;
         const v = await this.input(node, "value");
         if (isRef(v, "agent")) return s.agents.some((a) => a.id === v.id);
         if (isRef(v, "entity")) return s.entities.some((e) => e.id === v.id);

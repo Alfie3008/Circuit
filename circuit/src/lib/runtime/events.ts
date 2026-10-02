@@ -201,6 +201,7 @@ export function applyEvent(state: RuntimeState, event: CircuitEvent, rng: Rng): 
       m.ticks += 1;
       break;
     case "bounty_submission": {
+      if (isRef(d.submission, "submission")) break; // raised by the program; already stored
       const bounty = [...state.bounties].reverse().find((b) => b.status === "open");
       if (bounty) {
         const id = `sub_${state.nextId++}`;
@@ -215,6 +216,19 @@ export function applyEvent(state: RuntimeState, event: CircuitEvent, rng: Rng): 
     }
   }
   return before;
+}
+
+type Add = (payload: Record<string, Value>, label: string) => void;
+
+/** Market-cap and holder-count hats fire when the value crosses their threshold. */
+function crossings(hat: IRNode, before: Market, after: Market, add: Add) {
+  const crossed = (from: number, to: number, t: number) =>
+    hat.direction === "below" ? from > t && to <= t : from < t && to >= t;
+  const t = num(hat.threshold);
+  if (hat.type === "market_cap_crosses" && crossed(before.marketCap, after.marketCap, t))
+    add({ marketCap: after.marketCap }, `Market cap ${str(hat.direction)} $${fmt(t)}`);
+  if (hat.type === "holder_count_crosses" && crossed(before.holders, after.holders, t))
+    add({ holders: after.holders }, `Holders ${str(hat.direction)} ${fmt(t)}`);
 }
 
 /** Scripts this event triggers, in program order, with their payloads. */
@@ -241,21 +255,13 @@ export function dispatch(program: Program, event: CircuitEvent, before: Market, 
             add({ milestone, totalVolume: after.totalVolume }, `Volume reached ${fmt(milestone)} SOL`);
           }
         }
+        // Trades move market cap and holders, so they can cross thresholds too.
+        crossings(hat, before, after, add);
         break;
       }
       case "market_cap":
-        if (hat.type === "market_cap_crosses") {
-          const t = num(hat.threshold);
-          const crossed = hat.direction === "below" ? before.marketCap > t && after.marketCap <= t : before.marketCap < t && after.marketCap >= t;
-          if (crossed) add({ marketCap: after.marketCap }, `Market cap ${hat.direction} $${fmt(t)}`);
-        }
-        break;
       case "holders":
-        if (hat.type === "holder_count_crosses") {
-          const t = num(hat.threshold);
-          const crossed = hat.direction === "below" ? before.holders > t && after.holders <= t : before.holders < t && after.holders >= t;
-          if (crossed) add({ holders: after.holders }, `Holders ${hat.direction} ${fmt(t)}`);
-        }
+        crossings(hat, before, after, add);
         break;
       case "creator_fees":
         if (hat.type === "creator_fees") add({ amount: toNumber(d.amount), wallet: d.wallet ?? null }, `${fmt(toNumber(d.amount))} SOL in fees collected`);
@@ -297,3 +303,66 @@ export function dispatch(program: Program, event: CircuitEvent, before: Market, 
 
 /** Labels for list-type text fields that may arrive as text or as a parsed list. */
 export const listField = (v: unknown): string[] => toList(v as Value).map((x) => toText(x)).filter(Boolean);
+
+// ---------------------------------------------------------------------------
+// Simulator presets: world-panel buttons and the live market feed
+// ---------------------------------------------------------------------------
+
+export type PresetId = "buy" | "sell" | "volume10" | "fees" | "holders" | "graduate" | "tick" | "submission";
+
+export const PRESETS: { id: PresetId; label: string; hint: string }[] = [
+  { id: "buy", label: "Buy", hint: "A random buy (0.2–3 SOL)" },
+  { id: "sell", label: "Sell", hint: "A random sell (0.2–3 SOL)" },
+  { id: "volume10", label: "+10 SOL", hint: "A 10 SOL buy: crosses volume milestones" },
+  { id: "fees", label: "Fees", hint: "Creator fees land in the project treasury" },
+  { id: "holders", label: "+50 holders", hint: "Holder count jumps by 50" },
+  { id: "tick", label: "Timer", hint: "Fires every “every X minutes” script once" },
+  { id: "submission", label: "Submission", hint: "Someone submits to the newest open bounty" },
+  { id: "graduate", label: "Graduate", hint: "The token graduates" },
+];
+
+/** A normalized event for a simulator preset. Dispatch decides which scripts it triggers. */
+export function presetEvent(id: PresetId, state: RuntimeState, rng: Rng, now = Date.now()): CircuitEvent {
+  const ev = (type: EventKind, data: Record<string, Value>): CircuitEvent => ({ type, source: "simulator", timestamp: now, data });
+  switch (id) {
+    case "buy":
+    case "sell":
+      return ev("trade", { amount: rng.range(0.2, 3), side: id, wallet: shortWallet(rng), token: "TOKEN" });
+    case "volume10":
+      return ev("trade", { amount: 10, side: "buy", wallet: shortWallet(rng), token: "TOKEN" });
+    case "fees":
+      return ev("creator_fees", { amount: rng.range(0.05, 0.4), wallet: "creator" });
+    case "holders":
+      return ev("holders", { from: state.market.holders, to: state.market.holders + 50 });
+    case "tick":
+      return ev("tick", {});
+    case "submission":
+      return ev("bounty_submission", { wallet: shortWallet(rng) });
+    case "graduate":
+      return ev("token_graduates", { token: "TOKEN" });
+  }
+}
+
+/** One step of the live market: mostly small trades, sometimes fees. */
+export function marketEvent(state: RuntimeState, rng: Rng, now = Date.now()): CircuitEvent {
+  if (rng.next() < 0.15) return presetEvent("fees", state, rng, now);
+  return presetEvent(rng.next() < 0.68 ? "buy" : "sell", state, rng, now);
+}
+
+/** Events the program itself defines (button labels, webhook paths, site events), as one-click triggers. */
+export function programTriggers(program: Program): { label: string; event: (now?: number) => CircuitEvent }[] {
+  const out: { label: string; event: (now?: number) => CircuitEvent }[] = [];
+  const seen = new Set<string>();
+  for (const s of program.scripts) {
+    const h = s.event;
+    const mk = (key: string, label: string, type: EventKind, data: Record<string, Value>) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ label, event: (now = Date.now()) => ({ type, source: "simulator", timestamp: now, data }) });
+    };
+    if (h.type === "button") mk(`b:${str(h.label)}`, str(h.label) || "Button", "button", { label: str(h.label) });
+    if (h.type === "webhook") mk(`w:${str(h.path)}`, `POST ${str(h.path)}`, "webhook", { path: str(h.path), payload: { hello: "world" } });
+    if (h.type === "website_event") mk(`s:${str(h.name)}`, `Site: ${str(h.name)}`, "website_event", { name: str(h.name), payload: {} });
+  }
+  return out;
+}
