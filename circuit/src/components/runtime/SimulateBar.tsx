@@ -17,8 +17,13 @@ function LivePanel() {
   const { status, mint, lastCheck, seen, holders, error, start, stop } = useLiveChain();
   const chain = useRuntimeStore((s) => s.chainStatus);
   const setup = useProjectStore((s) => s.setup);
-  const openDialog = useProjectStore((s) => s.openDialog);
   const on = status !== "off";
+  // Watching a token means the project is about an existing token.
+  const pickToken = () => {
+    const project = useProjectStore.getState();
+    if (project.setup.launchMode !== "existing") project.updateSetup({ launchMode: "existing" });
+    project.openDialog("setup");
+  };
 
   if (!on)
     return (
@@ -27,12 +32,20 @@ function LivePanel() {
           Run this program on your token&apos;s real trades. Every receipt links to the transaction on Solscan.
         </p>
         <div className="flex flex-wrap items-center gap-2 font-mono text-[11.5px]">
-          <button onClick={start} className="h-[26px] rounded-md bg-ok/90 px-2.5 font-medium text-[#0b0c0d] hover:bg-ok">
-            Watch {setup.tokenAddress ? short(setup.tokenAddress) : "token"}
-          </button>
-          <button onClick={() => openDialog("setup")} className="text-dim underline-offset-2 hover:text-fg hover:underline">
-            {setup.tokenAddress ? "change token" : "set token"}
-          </button>
+          {setup.tokenAddress ? (
+            <>
+              <button onClick={start} className="h-[26px] rounded-md bg-ok/90 px-2.5 font-medium text-[#0b0c0d] hover:bg-ok">
+                Watch {short(setup.tokenAddress)}
+              </button>
+              <button onClick={pickToken} className="text-dim underline-offset-2 hover:text-fg hover:underline">
+                change token
+              </button>
+            </>
+          ) : (
+            <button onClick={pickToken} className="h-[26px] rounded-md bg-ok/90 px-2.5 font-medium text-[#0b0c0d] hover:bg-ok">
+              Set your token address
+            </button>
+          )}
         </div>
         {!chain?.enabled && (
           <p className="text-[11.5px] leading-snug text-dim">
@@ -84,16 +97,18 @@ export function SimulateBar() {
       role="tab"
       aria-selected={mode === m}
       onClick={() => setMode(m)}
-      className={`flex items-center gap-1.5 transition-colors ${mode === m ? "text-fg" : "text-dim hover:text-fg-2"}`}
+      className={`flex h-[24px] items-center gap-1.5 rounded-md border px-2 transition-colors ${
+        mode === m ? "border-line-2 bg-raised text-fg" : "border-transparent text-muted hover:border-line-2 hover:text-fg"
+      } ${m === "live" && mode !== m ? "text-ok/90" : ""}`}
     >
-      {m === "live" && <span className={`h-1.5 w-1.5 rounded-full ${watching ? "animate-pulse bg-ok" : "bg-[#3a3d43]"}`} />}
+      {m === "live" && <span className={`h-1.5 w-1.5 rounded-full ${watching ? "animate-pulse bg-ok" : "bg-ok/60"}`} />}
       {label}
     </button>
   );
 
   return (
     <section className="border-b border-line px-3 pb-3 pt-2.5" aria-label="Event source">
-      <div className="mb-2 flex items-center gap-4 font-mono text-[11px] tracking-[0.12em]" role="tablist">
+      <div className="mb-2.5 flex items-center gap-1.5 font-mono text-[11px] tracking-[0.12em]" role="tablist">
         {tab("sim", "SIMULATOR")}
         {tab("live", "LIVE TOKEN")}
         {mode === "sim" && (

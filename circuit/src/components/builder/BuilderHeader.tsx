@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CodeIcon } from "@/components/ui/icons";
+import { ChevronDownIcon, CodeIcon } from "@/components/ui/icons";
 import { useProjectStore } from "@/store/project";
 import { useRuntimeStore } from "@/store/runtime";
 import { AiBar } from "./AiBar";
@@ -51,9 +51,11 @@ export function BuilderHeader({ panel, onToggle }: { panel: "ir" | "explain" | n
         <button
           onClick={() => openDialog("setup")}
           title="Project setup: how this project relates to a token"
-          className="hidden shrink-0 rounded-full border border-line-2 px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-dim transition-colors hover:border-signal/50 hover:text-fg lg:inline"
+          className="hidden shrink-0 items-center gap-1 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-fg-2 transition-colors hover:border-signal/50 hover:text-fg lg:inline-flex"
         >
+          <span className="text-dim">TOKEN:</span>
           {MODE_LABEL[launchMode]}
+          <ChevronDownIcon width={11} height={11} className="text-dim" />
         </button>
       </div>
 
