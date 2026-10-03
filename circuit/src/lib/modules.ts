@@ -6,7 +6,7 @@
 import { BLOCKS } from "@/lib/blocks";
 import type { BlockSpec, ModuleId } from "@/lib/blocks/types";
 
-export type ModuleStatus = "built-in" | "local" | "mock" | "simulated";
+export type ModuleStatus = "built-in" | "local" | "live" | "mock" | "simulated";
 
 export interface ModuleInfo {
   id: ModuleId;
@@ -19,8 +19,8 @@ export interface ModuleInfo {
 
 export const MODULE_INFO: ModuleInfo[] = [
   { id: "core", name: "Core", description: "Control flow, logic, maths, lists and variables. The language itself.", status: "built-in" },
-  { id: "solana", name: "Solana", description: "Token events (trades, volume, holders, fees) and wallet reads.", status: "simulated", next: "Phase 6: live read-only events and balances via Helius." },
-  { id: "ai", name: "AI", description: "Agents, ask/choose/classify/summarize, identities, generated text and images.", status: "mock", next: "Phase 5: Claude (Haiku) through a rate-limited server route." },
+  { id: "solana", name: "Solana", description: "Token events (trades, volume, holders, fees) and wallet reads.", status: "live", next: "Live and read-only when the server has a Solana RPC (Helius); the simulator otherwise." },
+  { id: "ai", name: "AI", description: "Agents, ask/choose/classify/summarize, identities, generated text and images.", status: "live", next: "Real Claude when the server has an Anthropic key, with daily spending caps; mock answers otherwise." },
   { id: "browser", name: "Browser", description: "Web search, opening pages, extracting text, following links, HTTP.", status: "mock", next: "Real read-only fetching behind an allowlist." },
   { id: "website", name: "Website", description: "Project world: entities, collections, feed, counters, site state and events.", status: "local" },
   { id: "finance", name: "Finance", description: "Treasury, named budgets, transfers, buys and sells.", status: "simulated", next: "Always simulated in the prototype. No keys, no real transactions." },
@@ -31,6 +31,7 @@ export const MODULE_INFO: ModuleInfo[] = [
 export const STATUS_TEXT: Record<ModuleStatus, string> = {
   "built-in": "Real: part of the interpreter",
   local: "Real: state kept in this project",
+  live: "Real with a key · mock without",
   mock: "Mock: canned responses",
   simulated: "Simulated: nothing leaves the app",
 };

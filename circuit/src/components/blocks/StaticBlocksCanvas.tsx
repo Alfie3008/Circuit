@@ -89,15 +89,23 @@ export default function StaticBlocksCanvas({
       } finally {
         Blockly.Events.enable();
       }
+      // A picture: nothing moves, and Blockly won't "bump" stacks around.
+      for (const b of ws.getAllBlocks(false)) b.setMovable(false);
+      // Blockly renders on the next frame; draw now so sizes can be measured.
+      Blockly.renderManagement.triggerQueuedRenders(ws);
       const positions = new Map<string, Blockly.utils.Coordinate>();
       let cursor = 0;
+      // No move events: a canvas without scrollbars would pull blocks it thinks are off-screen back in.
+      Blockly.Events.disable();
       for (const b of ws.getTopBlocks(true) as Blockly.BlockSvg[]) {
         const box = b.getHeightWidth();
         const at = new Blockly.utils.Coordinate(layout === "row" ? cursor : 0, layout === "row" ? 0 : cursor);
         b.moveTo(at);
         positions.set(b.id, at);
-        cursor += (layout === "row" ? box.width : box.height) + gap;
+        // Keep separate stacks beyond snapping distance, or Blockly "bumps" them into each other.
+        cursor += (layout === "row" ? box.width : box.height) + Math.max(gap, Blockly.config.snapRadius + 12);
       }
+      Blockly.Events.enable();
       const bbox = ws.getBlocksBoundingBox();
       const total = assemblyOrder(ws).length;
       layoutRef.current = { positions, bbox: { left: bbox.left, top: bbox.top }, total };
@@ -141,6 +149,7 @@ export default function StaticBlocksCanvas({
           if (at) b.moveTo(at);
         }
         const hide = new Set(hiddenKey ? hiddenKey.split(",") : []);
+        for (const b of ws.getAllBlocks(false)) b.setMovable(false);
         const order = assemblyOrder(ws);
         const drop = order.filter((b, i) => (visible !== undefined && i >= visible) || hide.has(b.id));
         for (const b of drop) if (!b.isDisposed()) b.dispose(false);
