@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local server data (npm run dev without DATABASE_URL)
 /.circuit-data
+
+# design export for Claude Design (regenerate at /dev/block-export)
+/design-export
