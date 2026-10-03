@@ -1,13 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Receipt as ReceiptCard } from "@/components/proof/Receipt";
+import { receiptLeaf } from "@/lib/proof/proof";
 import type { Receipt } from "@/lib/runtime/state";
 import { clock, runNo } from "./format";
 
 const short = (s: string) => (s.length > 12 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s);
 
 /** A real run's receipt in the design's receipt card: real trigger, steps, status and proof. */
-export function RealReceipt({ r, size = "full", onOpen }: { r: Receipt; size?: "full" | "card" | "row"; onOpen?: () => void }) {
+/** Where a server receipt stands on Solana: in a batch whose root is on chain, waiting for the next batch, or not anchored at all. */
+export type AnchorState = { status: "anchored"; signature: string } | { status: "pending" } | { status: "off" };
+
+export function RealReceipt({ r, size = "full", onOpen, anchor, onVerify }: { r: Receipt; size?: "full" | "card" | "row"; onOpen?: () => void; anchor?: AnchorState; onVerify?: () => void }) {
+  const [leaf, setLeaf] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (anchor && anchor.status !== "off") void receiptLeaf(r).then((h) => alive && setLeaf(h));
+    return () => {
+      alive = false;
+    };
+  }, [r, anchor]);
   const steps = r.entries.slice(1).map((e) => ({ label: e.text, sim: e.simulated }));
   const failAt = r.entries.slice(1).findIndex((e) => e.status === "error");
   const status =
@@ -52,7 +65,22 @@ export function RealReceipt({ r, size = "full", onOpen }: { r: Receipt; size?: "
       line={r.event.label}
       trigger={{ verb: r.event.label, amount: r.event.type === "trade" ? amount : undefined, by }}
       sub={sub}
-      naText={proof ? "Real transaction · receipt not yet anchored on Solana (coming with verified receipts)" : source === "sim" && kind !== "schedule" && kind !== "runtime" ? "Simulated run · not written to Solana" : "Not written to Solana"}
+      proof={anchor?.status === "anchored" ? "anchored" : anchor?.status === "pending" ? "pending" : "na"}
+      fingerprints={{
+        program: r.rules?.slice(0, 8),
+        receipt: leaf ? `${leaf.slice(0, 4)}…${leaf.slice(-4)}` : "…",
+        ...(anchor?.status === "anchored" ? { tx: short(anchor.signature), txHref: `https://solscan.io/tx/${anchor.signature}` } : {}),
+      }}
+      onVerify={onVerify}
+      naText={
+        anchor?.status === "off"
+          ? "Receipt kept by Circuit · writing receipts to Solana isn't switched on for this server"
+          : proof
+            ? "Real transaction · receipt not written to Solana"
+            : source === "sim" && kind !== "schedule" && kind !== "runtime"
+              ? "Simulated run · not written to Solana"
+              : "Not written to Solana"
+      }
       countText={`${r.steps} ${r.steps === 1 ? "step" : "steps"}`}
       onOpen={onOpen}
     />

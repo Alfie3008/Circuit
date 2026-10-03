@@ -28,7 +28,7 @@ export interface Begun {
 export function begin(
   state: RuntimeState,
   match: Match,
-  opts: { rng: Rng; adapters: Adapters; source?: string; now?: () => number; maxSteps?: number; raise?: RunContext["raise"] },
+  opts: { rng: Rng; adapters: Adapters; source?: string; now?: () => number; maxSteps?: number; raise?: RunContext["raise"]; rules?: string },
 ): Begun {
   const now = opts.now?.() ?? Date.now();
   state.executionCount += 1;
@@ -48,6 +48,7 @@ export function begin(
     error: null,
     steps: 0,
     entries: [{ op: match.script.event.type.toUpperCase(), blockId: match.script.event.id, text: match.label, details: [], status: "ok" }],
+    ...(opts.rules ? { rules: opts.rules } : {}),
   };
   state.runs.push(receipt);
   if (state.runs.length > MAX_RUNS) state.runs.splice(0, state.runs.length - MAX_RUNS);

@@ -7,7 +7,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Receipt, RuntimeState } from "@/lib/runtime/state";
-import type { Db, ProjectQuery, RunMeta, ServerProject, StateRow } from "./types";
+import type { Db, ProofBatch, ProjectQuery, ReceiptAnchor, RunMeta, ServerProject, StateRow } from "./types";
 
 interface Data {
   projects: Record<string, ServerProject>;
@@ -15,6 +15,9 @@ interface Data {
   receipts: Record<string, Record<number, Receipt>>;
   seen: Record<string, string[]>;
   usage: Record<string, { calls: number; usd: number; feesUsd?: number }>;
+  batches: ProofBatch[];
+  /** "projectId|receiptId" → its place in a batch. */
+  anchors: Record<string, ReceiptAnchor>;
 }
 
 /** Signatures remembered per project (oldest are forgotten). */
@@ -25,7 +28,7 @@ const MAX_RECEIPTS = 2000;
 const clone = <T>(v: T): T => structuredClone(v);
 
 export function memoryDb(file?: string): Db {
-  let data: Data = { projects: {}, states: {}, receipts: {}, seen: {}, usage: {} };
+  let data: Data = { projects: {}, states: {}, receipts: {}, seen: {}, usage: {}, batches: [], anchors: {} };
   if (file) {
     try {
       data = { ...data, ...(JSON.parse(readFileSync(file, "utf8")) as Partial<Data>) };
@@ -40,6 +43,10 @@ export function memoryDb(file?: string): Db {
     const tmp = `${file}.tmp`;
     writeFileSync(tmp, JSON.stringify(data));
     renameSync(tmp, file);
+  };
+
+  const dropAnchors = (projectId: string) => {
+    for (const k of Object.keys(data.anchors)) if (k.startsWith(`${projectId}|`)) delete data.anchors[k];
   };
 
   const watches = (p: ServerProject, address: string) => p.setup.tokenAddress === address || p.setup.walletAddress === address;
@@ -65,6 +72,7 @@ export function memoryDb(file?: string): Db {
       delete data.states[id];
       delete data.receipts[id];
       delete data.seen[id];
+      dropAnchors(id);
       persist();
     },
     async listProjects(q: ProjectQuery) {
@@ -90,12 +98,14 @@ export function memoryDb(file?: string): Db {
       delete data.states[projectId];
       delete data.receipts[projectId];
       delete data.seen[projectId];
+      dropAnchors(projectId);
       persist();
     },
 
     async addReceipts(projectId, receipts) {
       const map = (data.receipts[projectId] ??= {});
-      for (const r of receipts) map[r.id] = clone(r);
+      // An anchored receipt is final: its fingerprint is on Solana.
+      for (const r of receipts) if (!data.anchors[`${projectId}|${r.id}`]) map[r.id] = clone(r);
       const ids = Object.keys(map).map(Number).sort((a, b) => a - b);
       for (const id of ids.slice(0, Math.max(0, ids.length - MAX_RECEIPTS))) delete map[id];
       persist();
@@ -106,6 +116,50 @@ export function memoryDb(file?: string): Db {
         .sort((a, b) => b.id - a.id)
         .slice(0, limit)
         .map(clone);
+    },
+
+    async claimBatch(limit, now) {
+      const items: { projectId: string; receipt: Receipt }[] = [];
+      for (const [projectId, map] of Object.entries(data.receipts))
+        for (const r of Object.values(map)) if (r.finishedAt !== null && !data.anchors[`${projectId}|${r.id}`]) items.push({ projectId, receipt: r });
+      if (!items.length) return null;
+      items.sort((a, b) => a.receipt.startedAt - b.receipt.startedAt || a.receipt.id - b.receipt.id);
+      const take = items.slice(0, limit);
+      const batch: ProofBatch = { id: (data.batches.at(-1)?.id ?? 0) + 1, root: "", leaves: [], status: "pending", signature: null, slot: null, createdAt: now, sentAt: null };
+      data.batches.push(batch);
+      take.forEach((it, index) => (data.anchors[`${it.projectId}|${it.receipt.id}`] = { batchId: batch.id, index }));
+      persist();
+      return { batch: clone(batch), items: take.map(clone) };
+    },
+    async updateBatch(id, patch) {
+      const b = data.batches.find((x) => x.id === id);
+      if (b) Object.assign(b, clone(patch));
+      persist();
+    },
+    async releaseBatch(id) {
+      const b = data.batches.find((x) => x.id === id);
+      if (b) b.status = "failed";
+      for (const [k, a] of Object.entries(data.anchors)) if (a.batchId === id) delete data.anchors[k];
+      persist();
+    },
+    async openBatches() {
+      return data.batches.filter((b) => b.status === "pending" || b.status === "sent").map(clone);
+    },
+    async latestBatch() {
+      const b = data.batches.at(-1);
+      return b ? clone(b) : null;
+    },
+    async getBatch(id) {
+      const b = data.batches.find((x) => x.id === id);
+      return b ? clone(b) : null;
+    },
+    async receiptAnchors(projectId, receiptIds) {
+      const out: Record<number, ReceiptAnchor> = {};
+      for (const id of receiptIds) {
+        const a = data.anchors[`${projectId}|${id}`];
+        if (a) out[id] = { ...a };
+      }
+      return out;
     },
 
     async claim(projectId, signature) {

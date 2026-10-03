@@ -10,6 +10,7 @@ import { initialState } from "@/lib/runtime/state";
 import { hash } from "@/lib/runtime/rng";
 import { invalidateLive } from "./chainFeed";
 import { syncWebhook, type SyncResult } from "./helius";
+import { checkCreator, type CreatorLookup } from "./proofs";
 import { emptyMeta, ServerError, type Db, type ServerProject } from "./types";
 
 const RESERVED = new Set(["new", "edit", "admin", "api", "app", "circuit", "settings", "login", "about", "help", "p"]);
@@ -46,8 +47,11 @@ export const PublishSchema = z.object({
   timezone: z.string().max(64).optional(),
 });
 
-/** Publishes (or republishes) a project. The program is re-validated here. */
-export async function publish(db: Db, owner: string, input: unknown, now = Date.now()): Promise<ServerProject> {
+/**
+ * Publishes (or republishes) a project. The program is re-validated here, and
+ * a coin can only be published by the wallet that created it.
+ */
+export async function publish(db: Db, owner: string, input: unknown, now = Date.now(), opts: { creatorLookup?: CreatorLookup } = {}): Promise<ServerProject> {
   const body = PublishSchema.safeParse(input);
   if (!body.success) throw new ServerError("That publish request isn't valid.");
   const { id, name } = body.data;
@@ -67,6 +71,12 @@ export async function publish(db: Db, owner: string, input: unknown, now = Date.
   const mine = existing ? 0 : (await db.listProjects({ owner, limit: 101 })).length;
   if (mine >= 100) throw new ServerError("You've reached 100 published projects.", 403);
 
+  // The creator check, once per coin (again if the coin changes).
+  const mint = setup.launchMode === "existing" && setup.tokenAddress ? setup.tokenAddress : null;
+  let creator = existing?.proof?.creator ?? null;
+  if (mint && (creator?.mint !== mint || creator.wallet !== owner)) creator = (await checkCreator(mint, owner, opts.creatorLookup, now)) ?? null;
+  if (!mint) creator = null;
+
   const timezone = body.data.timezone && validZone(body.data.timezone) ? body.data.timezone : (existing?.timezone ?? "UTC");
   const project: ServerProject = {
     id,
@@ -79,6 +89,7 @@ export async function publish(db: Db, owner: string, input: unknown, now = Date.
     timezone,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+    proof: { ...existing?.proof, creator },
   };
   await db.saveProject(project);
   // What the program watches may have changed.

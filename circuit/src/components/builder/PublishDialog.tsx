@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { field, label, Modal } from "@/components/ui/Modal";
-import { api, findWallet, shortWallet } from "@/lib/account/wallet";
+import { api, findWallet, shortWallet, writeRulesToSolana } from "@/lib/account/wallet";
 import { FUEL_SHARE, type Fuel } from "@/lib/fuel";
+import { rulesFingerprint } from "@/lib/proof/proof";
 import type { Program } from "@/lib/ir";
 import type { ProjectSetup } from "@/lib/project/storage";
-import type { RunMeta } from "@/lib/server/types";
+import type { ProjectProof, RunMeta } from "@/lib/server/types";
 import { useAccount } from "@/store/account";
 import { useProjectStore } from "@/store/project";
 import { clock } from "@/components/runtime/format";
 
 interface Owned {
-  project: { id: string; slug: string; name: string; live: boolean; timezone: string; updatedAt: number; program: Program; setup: ProjectSetup };
+  project: { id: string; slug: string; name: string; live: boolean; timezone: string; updatedAt: number; program: Program; setup: ProjectSetup; proof: ProjectProof };
   status: Partial<RunMeta> & { executions: number };
   aiToday: { calls: number; usd: number };
   fuel: Fuel;
@@ -60,6 +61,58 @@ function SignIn() {
         </p>
       )}
       {error && <p className="text-[12.5px] text-err">{error}</p>}
+    </div>
+  );
+}
+
+/** The published rules' place on Solana, and the button to write the current version. */
+function RulesOnChain({ owned, onDone }: { owned: Owned; onDone: () => void }) {
+  const [fp, setFp] = useState<string | null>(null);
+  const [stage, setStage] = useState<"idle" | "wallet" | "confirming">("idle");
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void rulesFingerprint(owned.project.program).then((f) => alive && setFp(f));
+    return () => {
+      alive = false;
+    };
+  }, [owned.project.program]);
+  const versions = owned.project.proof.rules ?? [];
+  const latest = versions.at(-1);
+  const current = !!fp && latest?.fingerprint === fp;
+  const write = async () => {
+    setError(null);
+    try {
+      await writeRulesToSolana(owned.project.id, owned.project.slug, owned.project.program, setStage);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStage("idle");
+    }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 font-mono text-[11.5px]">
+        <span className="text-dim">RULES ON SOLANA</span>
+        {current ? (
+          <a href={`https://solscan.io/tx/${latest!.signature}`} target="_blank" rel="noreferrer" className="text-ok hover:underline">
+            ✓ v{latest!.version} · {fp!.slice(0, 8)} ↗
+          </a>
+        ) : (
+          <span className="text-[oklch(0.88_0.13_80)]">{latest ? "published rules changed: not written yet" : "not written yet"}</span>
+        )}
+      </div>
+      {!current && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={() => void write()} disabled={stage !== "idle" || !fp} className={ghost}>
+            {stage === "wallet" ? "Approve in your wallet…" : stage === "confirming" ? "Waiting for Solana…" : "Write to Solana"}
+          </button>
+          <span className="text-[11.5px] text-dim">One small transaction from your wallet (about 0.000005 SOL).</span>
+        </div>
+      )}
+      {owned.project.proof.creator && <span className="text-[11.5px] text-ok">✓ Verified: this wallet created the coin.</span>}
+      {error && <p className="text-[12px] text-err">{error}</p>}
     </div>
   );
 }
@@ -245,6 +298,8 @@ export function PublishDialog() {
                     : "No coin connected, so there are no creator fees: AI blocks use simple fallbacks. Connect a coin in Project setup to give it real AI."}
                 </p>
               </div>
+
+              <RulesOnChain owned={owned} onDone={() => void load()} />
 
               <div className="flex gap-2 border-t border-line pt-3">
                 <button

@@ -19,7 +19,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]">)
     const p = await ownProject(db, owner, id);
     const [row, usage, totals] = await Promise.all([db.getState(id), db.aiUsage(id, today()), db.fuelTotals(id)]);
     return Response.json({
-      project: { id: p.id, slug: p.slug, name: p.name, live: p.live, timezone: p.timezone, updatedAt: p.updatedAt, program: p.program, setup: p.setup },
+      project: { id: p.id, slug: p.slug, name: p.name, live: p.live, timezone: p.timezone, updatedAt: p.updatedAt, program: p.program, setup: p.setup, proof: p.proof ?? {} },
       status: { ...(row?.meta ?? {}), executions: row?.state.executionCount ?? 0 },
       aiToday: usage,
       fuel: fuelOf(totals),

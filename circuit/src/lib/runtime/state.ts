@@ -86,6 +86,8 @@ export interface Receipt {
   error: string | null;
   steps: number;
   entries: ReceiptEntry[];
+  /** SHA-256 of the rules that ran (server runs), so a receipt can be matched to a published version. */
+  rules?: string;
 }
 
 export interface RuntimeState {

@@ -1,6 +1,7 @@
 /**
- * Server-only Solana reads. Read-only by construction: this module has no
- * signing keys and never sends transactions.
+ * Server-only Solana access. This module has no signing keys: the only write
+ * is `sendRawTransaction`, which relays a transaction already signed
+ * elsewhere (Circuit's proof batches, see lib/server/anchor).
  *
  * RPC endpoint: HELIUS_API_KEY → Helius mainnet; otherwise
  * CIRCUIT_SOLANA_RPC_URL (any Solana RPC, e.g. the public
@@ -65,6 +66,31 @@ export const getSignatures = (address: string, opts: { until?: string; before?: 
 
 export const getTransaction = (signature: string, f?: Fetcher) =>
   rpc<RpcTransaction | null>("getTransaction", [signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }], f);
+
+/** Raw account data (base64-decoded), or null if the account doesn't exist. */
+export async function getAccountData(address: string, f?: Fetcher): Promise<Uint8Array | null> {
+  const r = await rpc<{ value: { data: [string, string] } | null }>("getAccountInfo", [address, { encoding: "base64", commitment: "confirmed" }], f);
+  return r.value ? Uint8Array.from(Buffer.from(r.value.data[0], "base64")) : null;
+}
+
+export async function getLatestBlockhash(f?: Fetcher): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
+  const r = await rpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>("getLatestBlockhash", [{ commitment: "confirmed" }], f);
+  return r.value;
+}
+
+/** Relays a signed transaction (base64). Returns its signature. */
+export const sendRawTransaction = (base64: string, f?: Fetcher) =>
+  rpc<string>("sendTransaction", [base64, { encoding: "base64", preflightCommitment: "confirmed", maxRetries: 3 }], f);
+
+export interface SignatureStatus {
+  slot: number;
+  err: unknown;
+  confirmationStatus?: "processed" | "confirmed" | "finalized";
+}
+export async function getSignatureStatus(signature: string, f?: Fetcher): Promise<SignatureStatus | null> {
+  const r = await rpc<{ value: (SignatureStatus | null)[] }>("getSignatureStatuses", [[signature], { searchTransactionHistory: true }], f);
+  return r.value[0] ?? null;
+}
 
 export async function getSolBalance(address: string, f?: Fetcher): Promise<number> {
   const r = await rpc<{ value: number }>("getBalance", [address, { commitment: "confirmed" }], f);

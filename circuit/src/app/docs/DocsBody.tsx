@@ -23,10 +23,10 @@ const TOC: [string, string][] = [
 ];
 
 const GO_LIVE: [string, string][] = [
-  ["Connect the coin", "Paste the mint address and sign a message with the wallet that created it. Signing is free and moves no SOL."],
+  ["Connect the coin", "Paste the mint address and sign in with the wallet that created it. Circuit checks on Solana that it did. Signing in is free and moves no SOL."],
   ["AI fuel", `Nothing to set. Your coin pays for its own AI: up to ${FUEL_SHARE * 100}% of the creator fees it earns after going live. The rest is never touched.`],
   ["Review", "Read the plain-English rules one more time."],
-  ["Publish", "The program's fingerprint is written to Solana and the transaction is shown."],
+  ["Publish", "Your page goes live, then your wallet writes the rules' fingerprint to Solana in one small transaction (about 0.000005 SOL)."],
   ["Choose the page layout", "World, Gallery, Feed or Website. You can change it later."],
 ];
 

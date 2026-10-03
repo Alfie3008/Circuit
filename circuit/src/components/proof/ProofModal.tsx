@@ -122,7 +122,7 @@ export function ProofModal({ view, onClose, example }: { view: ProofView | null;
               <div className="mt-0.5 text-[13px] text-fg-2">{done ? v.ok[1] : "Each step links to Solscan so you can repeat it."}</div>
             </div>
           </div>
-          {example && <p className="mx-[18px] mb-4 -mt-2 font-mono text-[10.5px] text-faint">Sample data. On-chain anchoring arrives with verified rules and receipts.</p>}
+          {example && <p className="mx-[18px] mb-4 -mt-2 font-mono text-[10.5px] text-faint">Sample data. On a coin&apos;s page, Verify runs these checks on the real receipt and rules.</p>}
         </div>
       )}
     </div>

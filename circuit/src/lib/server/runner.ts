@@ -16,6 +16,7 @@
  *   receipt says so
  */
 import { AI_COST_PER_CALL_USD, fuelOf } from "@/lib/fuel";
+import { rulesFingerprint } from "@/lib/proof/proof";
 import { chainProvider, getSolBalance } from "@/lib/chain/rpc";
 import { aiConfigured, anthropicCaller, runtimeModel, type ModelCaller } from "@/lib/ai/model";
 import { runOp } from "@/lib/ai/runtime";
@@ -156,6 +157,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
         return null;
       };
 
+      const rules = await rulesFingerprint(project.program);
       const rng = new Rng(state.seed);
       const base = opts.adapters?.(rng) ?? { ai: mockAi(rng), web: mockWeb(rng), chain: chainProvider() ? solanaChain() : mockChain() };
       const { ai } = budgetedAi(base.ai, rng, caller, allowance, () => realCalls++);
@@ -183,7 +185,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
           try {
             for (const match of trigger(state, project.program, queue.shift()!, rng)) {
               if (++chain > MAX_CHAIN || window.runs >= limits.runsPerMinute) break;
-              const { receipt, run } = begin(state, match, { rng, adapters, now: clock, raise: (e) => queue.push({ ...e, timestamp: clock() }) });
+              const { receipt, run } = begin(state, match, { rng, adapters, now: clock, rules, raise: (e) => queue.push({ ...e, timestamp: clock() }) });
               open = receipt;
               let r = await run.next();
               while (!r.done) {

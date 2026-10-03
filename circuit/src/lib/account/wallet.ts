@@ -14,6 +14,8 @@ interface SolanaProvider {
   connect(): Promise<{ publicKey: PublicKeyLike } | void>;
   publicKey?: PublicKeyLike | null;
   signMessage(message: Uint8Array, encoding?: "utf8"): Promise<{ signature: Uint8Array } | Uint8Array>;
+  /** Signs and sends a @solana/web3.js transaction (all major wallets support it). */
+  signAndSendTransaction?(tx: unknown): Promise<{ signature: string } | string>;
   disconnect?(): Promise<void>;
 }
 
@@ -81,4 +83,45 @@ export async function api<T>(url: string, init: { method?: string; body?: unknow
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw Object.assign(new Error(data.error ?? `Request failed (${res.status})`), { status: res.status });
   return data;
+}
+
+/**
+ * Writes a published project's rules fingerprint to Solana: the wallet signs
+ * one memo transaction (network fee only, about 0.000005 SOL), then the server
+ * reads it back from Solana and records the version.
+ */
+export async function writeRulesToSolana(projectId: string, slug: string, program: unknown, onStage?: (stage: "wallet" | "confirming") => void): Promise<{ version: number; signature: string }> {
+  const found = findWallet();
+  if (!found) throw new Error("No Solana wallet found. Install Phantom (phantom.com) and reload.");
+  const { provider } = found;
+  if (!provider.signAndSendTransaction) throw new Error(`${found.name} can't send transactions from this page. Try Phantom or Solflare.`);
+  const connected = await provider.connect();
+  const owner = (connected && "publicKey" in connected ? connected.publicKey : provider.publicKey)?.toString();
+  if (!owner) throw new Error("The wallet didn't share its address.");
+
+  const [{ rulesFingerprint, rulesMemo, MEMO_PROGRAM }, web3, { blockhash }] = await Promise.all([
+    import("@/lib/proof/proof"),
+    import("@solana/web3.js"),
+    api<{ blockhash: string }>("/api/proof/blockhash"),
+  ]);
+  const fingerprint = await rulesFingerprint(program);
+  const payer = new web3.PublicKey(owner);
+  const tx = new web3.Transaction({ feePayer: payer, recentBlockhash: blockhash }).add(
+    new web3.TransactionInstruction({ programId: new web3.PublicKey(MEMO_PROGRAM), keys: [{ pubkey: payer, isSigner: true, isWritable: true }], data: new TextEncoder().encode(rulesMemo(slug, fingerprint)) as Buffer }),
+  );
+  onStage?.("wallet");
+  const sent = await provider.signAndSendTransaction(tx);
+  const signature = typeof sent === "string" ? sent : sent.signature;
+  onStage?.("confirming");
+
+  // Solana takes a few seconds to confirm; the server says 409 until it can read the transaction.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { version } = await api<{ version: { version: number } }>(`/api/projects/${projectId}/rules`, { method: "POST", body: { signature } });
+      return { version: version.version, signature };
+    } catch (e) {
+      if ((e as { status?: number }).status !== 409 || attempt >= 8) throw e;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  }
 }

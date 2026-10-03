@@ -110,6 +110,30 @@ function contract(name: string, make: () => Promise<Db>) {
       expect(await db.fuelTotals("nobody")).toEqual({ feesUsd: 0, spentUsd: 0, calls: 0 });
     });
 
+    it("keeps proof on the project, and batches each finished receipt exactly once", async () => {
+      await db.saveProject(project("z", { slug: "slug-z", proof: { creator: null, rules: [{ version: 1, fingerprint: "ab".repeat(32), signature: "sig", slot: 1, at: 2 }] } }));
+      expect((await db.getProject("z"))!.proof!.rules![0].version).toBe(1);
+      await db.addReceipts("z", [receipt(1), receipt(2), { ...receipt(3), finishedAt: null }]);
+      const first = (await db.claimBatch(100, 5000))!;
+      const mine = first.items.filter((i) => i.projectId === "z").map((i) => i.receipt.id);
+      expect(mine).toEqual([1, 2]); // unfinished receipt 3 waits
+      expect((await db.claimBatch(100, 5001))?.items.some((i) => i.projectId === "z") ?? false).toBe(false);
+      await db.updateBatch(first.batch.id, { root: "cd".repeat(32), leaves: ["x", "y"], status: "sent", signature: "batchsig", sentAt: 5002 });
+      expect(await db.getBatch(first.batch.id)).toMatchObject({ status: "sent", signature: "batchsig", leaves: ["x", "y"] });
+      expect((await db.openBatches()).map((b) => b.id)).toContain(first.batch.id);
+      expect(Object.keys(await db.receiptAnchors("z", [1, 2, 3])).map(Number)).toEqual([1, 2]);
+      // Anchored receipts are final.
+      await db.addReceipts("z", [{ ...receipt(1), steps: 42 }]);
+      expect((await db.listReceipts("z", 5)).find((r) => r.id === 1)!.steps).toBe(1);
+      // A failed batch frees its receipts.
+      await db.releaseBatch(first.batch.id);
+      expect((await db.getBatch(first.batch.id))!.status).toBe("failed");
+      expect(await db.receiptAnchors("z", [1, 2])).toEqual({});
+      expect((await db.claimBatch(100, 5003))!.items.filter((i) => i.projectId === "z")).toHaveLength(2);
+      expect((await db.latestBatch())!.id).toBeGreaterThan(first.batch.id);
+      await db.deleteProject("z");
+    });
+
     it("reset and delete remove a project's world", async () => {
       await db.resetState("a");
       expect(await db.getState("a")).toBeNull();

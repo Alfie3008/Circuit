@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { alpha, ERR, OK, SIG, VAL } from "@/components/proof/tokens";
 import { artFor, clock } from "@/components/runtime/format";
 import { useFingerprint } from "@/components/runtime/fingerprint";
-import { RealReceipt } from "@/components/runtime/RealReceipt";
+import { VerifyChecks } from "@/components/proof/VerifyChecks";
+import { RealReceipt, type AnchorState } from "@/components/runtime/RealReceipt";
 import { Words } from "@/components/runtime/Words";
 import { LogoMark } from "@/components/site/Logo";
 import { solscanAccount } from "@/lib/chain/parse";
 import { explainProgram } from "@/lib/explain/explain";
 import { countBlocks } from "@/lib/marketing/demos";
+import { rulesFingerprint } from "@/lib/proof/proof";
+import { verifyReceipt, verifyRules, type Check } from "@/lib/proof/verify";
 import type { Receipt } from "@/lib/runtime/state";
 import type { Value } from "@/lib/runtime/values";
 import type { PublicProject } from "@/lib/server/publicView";
@@ -86,6 +89,8 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
   const [layout, setLayout] = useState<Layout>(initial.layout ?? "world");
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState<Receipt | null>(null);
+  const [verifying, setVerifying] = useState<"receipt" | "rules" | null>(null);
+  const [fullFp, setFullFp] = useState<string | null>(null);
 
   // Live updates: poll while the tab is visible.
   useEffect(() => {
@@ -115,15 +120,44 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
   }, [initial.slug]);
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null);
+    if (!open && !verifying) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(null);
+      setVerifying(null);
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, verifying]);
 
   const rules = useMemo(() => explainProgram(view.program), [view.program]);
   const blocks = useMemo(() => countBlocks(view.program), [view.program]);
   const fingerprint = useFingerprint(view.program);
+  useEffect(() => {
+    let alive = true;
+    void rulesFingerprint(view.program).then((f) => alive && setFullFp(f));
+    return () => {
+      alive = false;
+    };
+  }, [view.program]);
+  const versions = view.proof?.rules ?? [];
+  const onChain = fullFp ? [...versions].reverse().find((v) => v.fingerprint === fullFp) : undefined;
+  const anchorOf = (r: Receipt): AnchorState => {
+    if (!view.proof?.anchoring) return { status: "off" };
+    const a = view.proof.anchors[r.id];
+    return a?.signature && (a.status === "sent" || a.status === "confirmed") ? { status: "anchored", signature: a.signature } : { status: "pending" };
+  };
+  const runReceiptCheck = useCallback(
+    (update: (c: Check[]) => void) => (open ? verifyReceipt(view.slug, open, view.proof?.rules ?? [], update) : Promise.resolve(false)),
+    // Re-run only for a different receipt, not on every poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open?.id, view.slug],
+  );
+  const runRulesCheck = useCallback(
+    (update: (c: Check[]) => void) => verifyRules(view.slug, view.program, view.owner, view.proof?.rules ?? [], update),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [view.slug, fullFp],
+  );
   const st = pageState(view);
   const m = view.world.market;
   const agents = [...view.world.agents].reverse();
@@ -207,6 +241,15 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
                   <span className={`h-1.5 w-1.5 rounded-[3px] ${st.key === "live" || st.key === "new" ? "animate-pulse" : ""}`} style={{ background: st.color }} />
                   {st.label}
                 </span>
+                {view.token && (
+                  <span
+                    className="inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full border px-[9px] tracking-[0.06em]"
+                    style={view.proof?.creator ? { borderColor: alpha(OK, 0.4), color: OK } : { borderColor: "#2a2c31", color: "#8b8d93" }}
+                    title={view.proof?.creator ? `Checked on Solana (${view.proof.creator.source}) when the page was published` : "The creator couldn't be checked on Solana"}
+                  >
+                    {view.proof?.creator ? `✓ by its creator ${short(view.owner)}` : "creator not verified"}
+                  </span>
+                )}
                 {view.token && (
                   <>
                     <button
@@ -303,14 +346,43 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
             </div>
           </div>
           <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
-            <Card n="02" title="RULES" right={<span className={`${mono} text-[10.5px] tracking-[0.12em] text-dim`}>PUBLISHED</span>}>
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] border border-dashed border-[#4a4d53] text-[14px] text-dim">○</span>
-                <div>
-                  <div className="text-[15px] font-medium">Published · not yet on Solana</div>
-                  <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">The rules above are exactly what runs. Writing their fingerprint to Solana is coming with verified rules.</div>
+            <Card
+              n="02"
+              title="RULES"
+              right={<span className={`${mono} text-[10.5px] tracking-[0.12em]`} style={{ color: onChain ? OK : "#6d7076" }}>{onChain ? `ON SOLANA · V${onChain.version}` : "PUBLISHED"}</span>}
+            >
+              {onChain ? (
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] border text-[14px]" style={{ borderColor: alpha(OK, 0.5), color: OK }}>
+                    ✓
+                  </span>
+                  <div>
+                    <div className="text-[15px] font-medium">On Solana · version {onChain.version}</div>
+                    <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">
+                      The creator&apos;s wallet wrote these rules&apos; fingerprint to Solana. If they change, a new version appears here.
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] border border-dashed border-[#4a4d53] text-[14px] text-dim">○</span>
+                  <div>
+                    <div className="text-[15px] font-medium">{versions.length ? "Changed · new version not on Solana yet" : "Published · not on Solana yet"}</div>
+                    <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">
+                      The rules above are exactly what runs.{" "}
+                      {versions.length ? "The creator changed them since the last version written to Solana." : "The creator hasn't written their fingerprint to Solana yet."}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {(onChain || versions.length > 0) && (
+                <button
+                  onClick={() => setVerifying("rules")}
+                  className={`h-8 cursor-pointer self-start rounded-[7px] border border-ok/50 bg-ok/[0.08] px-3 ${mono} text-[11.5px] text-[oklch(0.86_0.11_155)] hover:bg-ok/[0.16]`}
+                >
+                  ✓ Check the rules
+                </button>
+              )}
               <div className={`flex flex-col ${mono} text-[11.5px]`}>
                 <div className="flex justify-between gap-2.5 border-t border-[#1d1f23] py-2">
                   <span className="text-dim">Fingerprint</span>
@@ -331,6 +403,26 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
                   <span>{view.timezone}</span>
                 </div>
               </div>
+              {versions.length > 0 && (
+                <div className={`flex flex-col ${mono} text-[11.5px]`}>
+                  <div className="pb-1 text-[10.5px] tracking-[0.12em] text-dim">VERSIONS</div>
+                  {[...versions].reverse().map((v) => (
+                    <a
+                      key={v.version}
+                      href={`https://solscan.io/tx/${v.signature}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`flex justify-between gap-2.5 border-t border-[#1d1f23] py-2 hover:text-signal ${v === onChain ? "text-fg" : "text-fg-2"}`}
+                    >
+                      <span>
+                        v{v.version} · {v.fingerprint.slice(0, 8)}
+                        {v === onChain ? " · current" : ""}
+                      </span>
+                      <span>{date(v.at)} ↗</span>
+                    </a>
+                  ))}
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -518,15 +610,41 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
       </div>
 
       {open && (
-        <div onClick={() => setOpen(null)} className="fixed inset-0 z-[300] flex items-center justify-center bg-[rgba(5,6,7,.74)] p-6 backdrop-blur-[6px]">
+        <div
+          onClick={() => {
+            setOpen(null);
+            setVerifying(null);
+          }}
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-[rgba(5,6,7,.74)] p-6 backdrop-blur-[6px]"
+        >
           <div onClick={(e) => e.stopPropagation()} className="flex max-h-full w-[520px] max-w-full flex-col gap-2.5 overflow-auto">
             <div className={`flex justify-between ${mono} text-[11px] tracking-[0.12em] text-muted`}>
               <span>RECEIPT</span>
-              <button onClick={() => setOpen(null)} className="cursor-pointer text-fg">
+              <button
+                onClick={() => {
+                  setOpen(null);
+                  setVerifying(null);
+                }}
+                className="cursor-pointer text-fg"
+              >
                 CLOSE ✕
               </button>
             </div>
-            <RealReceipt r={open} />
+            <RealReceipt r={open} anchor={anchorOf(open)} onVerify={() => setVerifying("receipt")} />
+            {verifying === "receipt" && <VerifyChecks key={open.id} run={runReceiptCheck} title={`CHECKING RECEIPT #${String(open.id).padStart(4, "0")} ON SOLANA`} />}
+          </div>
+        </div>
+      )}
+      {verifying === "rules" && !open && (
+        <div onClick={() => setVerifying(null)} className="fixed inset-0 z-[300] flex items-center justify-center bg-[rgba(5,6,7,.74)] p-6 backdrop-blur-[6px]">
+          <div onClick={(e) => e.stopPropagation()} className="flex max-h-full w-[520px] max-w-full flex-col gap-2.5 overflow-auto">
+            <div className={`flex justify-between ${mono} text-[11px] tracking-[0.12em] text-muted`}>
+              <span>RULES</span>
+              <button onClick={() => setVerifying(null)} className="cursor-pointer text-fg">
+                CLOSE ✕
+              </button>
+            </div>
+            <VerifyChecks run={runRulesCheck} title="CHECKING THE RULES ON SOLANA" />
           </div>
         </div>
       )}

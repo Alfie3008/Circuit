@@ -141,3 +141,23 @@ export function parseTransaction(tx: RpcTransaction, opts: ParseOptions): Circui
 
 /** Base58 Solana address (32–44 chars). */
 export const isAddress = (s: unknown): s is string => typeof s === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+
+/**
+ * Memo texts in a transaction, from parsed instructions ("jsonParsed"
+ * encoding) or, failing that, the Memo program's log lines.
+ */
+export function memosOf(tx: RpcTransaction): string[] {
+  const out: string[] = [];
+  const message = tx.transaction.message as RpcTransaction["transaction"]["message"] & { instructions?: { program?: string; programId?: string; parsed?: unknown }[] };
+  for (const ix of message.instructions ?? []) if ((ix.program === "spl-memo" || ix.programId === MEMO_PROGRAM_ID) && typeof ix.parsed === "string") out.push(ix.parsed);
+  if (out.length) return out;
+  for (const line of tx.meta?.logMessages ?? []) {
+    const m = /^Program log: Memo \(len \d+\): "(.*)"$/.exec(line);
+    if (m) out.push(m[1].replace(/\\"/g, '"'));
+  }
+  return out;
+}
+const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+
+/** The fee payer (first signer) of a transaction. */
+export const signerOf = (tx: RpcTransaction) => accountKeys(tx)[0];

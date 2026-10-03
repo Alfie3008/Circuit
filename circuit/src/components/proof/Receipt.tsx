@@ -37,6 +37,8 @@ export interface ReceiptProps {
   sourceLabel?: string;
   /** Status bar count text (e.g. "6 steps"). */
   countText?: string;
+  /** Real proof values for the footer (short program and receipt fingerprints, batch transaction). */
+  fingerprints?: { program?: string; receipt?: string; tx?: string; txHref?: string };
 }
 
 const DEFAULT_STEPS: ReceiptStep[] = [
@@ -63,7 +65,8 @@ export function Receipt(p: ReceiptProps) {
   const size = p.size ?? "full";
   const source = p.source ?? "live";
   const status = p.status ?? "complete";
-  const proof = source === "live" && !p.naText ? (p.proof ?? "anchored") : "na";
+  const proof = p.proof && p.proof !== "na" ? p.proof : source === "live" && !p.naText ? (p.proof ?? "anchored") : "na";
+  const fp = p.fingerprints;
   const steps = p.steps ?? DEFAULT_STEPS;
   const n = steps.length;
   const card = size === "card";
@@ -220,15 +223,22 @@ export function Receipt(p: ReceiptProps) {
           <>
             <span className="flex min-w-0 flex-1 flex-wrap gap-x-2 gap-y-1">
               <span>
-                Program <span className="text-fg-2">a3f9c1e0</span>
+                Program <span className="text-fg-2">{fp?.program ?? "a3f9c1e0"}</span>
               </span>
               <span>·</span>
               <span>
-                receipt <span className="text-fg-2">9b27…e4d1</span>
+                receipt <span className="text-fg-2">{fp?.receipt ?? "9b27…e4d1"}</span>
               </span>
               <span>·</span>
               <span>
-                anchored in <span className="text-ok">tx 3vLm…Pq8s ↗</span>
+                anchored in{" "}
+                {fp?.txHref ? (
+                  <a href={fp.txHref} target="_blank" rel="noreferrer" className="text-ok hover:underline">
+                    tx {fp.tx} ↗
+                  </a>
+                ) : (
+                  <span className="text-ok">tx {fp?.tx ?? "3vLm…Pq8s"} ↗</span>
+                )}
               </span>
             </span>
             <button
@@ -243,7 +253,7 @@ export function Receipt(p: ReceiptProps) {
           <>
             <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-[5px] border-[1.5px] border-dashed border-signal [animation-duration:2.4s]" />
             <span className="min-w-0 flex-1">
-              Program <span className="text-fg-2">a3f9c1e0</span> · receipt <span className="text-fg-2">9b27…e4d1</span> · anchoring in the next batch, about 3 min
+              Program <span className="text-fg-2">{fp?.program ?? "a3f9c1e0"}</span> · receipt <span className="text-fg-2">{fp?.receipt ?? "9b27…e4d1"}</span> · anchoring in the next batch, about 3 min
             </span>
             <span className="inline-flex h-[26px] items-center rounded-md border border-dashed border-[#34363c] px-2.5 tracking-[0.06em] text-faint">Verify</span>
           </>

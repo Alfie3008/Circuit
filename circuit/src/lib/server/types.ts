@@ -22,6 +22,45 @@ export interface ServerProject {
   timezone: string;
   createdAt: number;
   updatedAt: number;
+  /** What's proven on Solana about this project. */
+  proof?: ProjectProof;
+}
+
+/** One version of the rules, its fingerprint written to Solana by the owner's wallet. */
+export interface RulesVersion {
+  version: number;
+  /** Full SHA-256 of the rules (64 hex). */
+  fingerprint: string;
+  signature: string;
+  slot: number;
+  at: number;
+}
+
+export interface ProjectProof {
+  /** Who created the coin, checked on Solana when the project was published with it. */
+  creator?: { mint: string; wallet: string; source: string; checkedAt: number } | null;
+  /** Rules versions written to Solana, oldest first. */
+  rules?: RulesVersion[];
+}
+
+/** A batch of receipt fingerprints whose Merkle root is written to Solana in one memo. */
+export interface ProofBatch {
+  id: number;
+  /** Merkle root (64 hex); empty until the leaves are worked out. */
+  root: string;
+  /** Receipt fingerprints in tree order. Kept even if receipts are deleted later. */
+  leaves: string[];
+  status: "pending" | "sent" | "confirmed" | "failed";
+  signature: string | null;
+  slot: number | null;
+  createdAt: number;
+  sentAt: number | null;
+}
+
+/** Where a receipt sits in a batch. */
+export interface ReceiptAnchor {
+  batchId: number;
+  index: number;
 }
 
 /** Server-side bookkeeping that isn't part of the program's world. */
@@ -78,6 +117,18 @@ export interface Db {
   addReceipts(projectId: string, receipts: Receipt[]): Promise<void>;
   /** Newest first. */
   listReceipts(projectId: string, limit: number, beforeId?: number): Promise<Receipt[]>;
+
+  /** Finished receipts not yet in a batch (oldest first), claimed for a new pending batch. Null if there are none. */
+  claimBatch(limit: number, now: number): Promise<{ batch: ProofBatch; items: { projectId: string; receipt: Receipt }[] } | null>;
+  updateBatch(id: number, patch: Partial<Omit<ProofBatch, "id" | "createdAt">>): Promise<void>;
+  /** Marks a batch failed and frees its receipts for the next one. */
+  releaseBatch(id: number): Promise<void>;
+  /** Batches still pending or sent (not confirmed or failed). */
+  openBatches(): Promise<ProofBatch[]>;
+  latestBatch(): Promise<ProofBatch | null>;
+  getBatch(id: number): Promise<ProofBatch | null>;
+  /** Batch positions of some of a project's receipts. */
+  receiptAnchors(projectId: string, receiptIds: number[]): Promise<Record<number, ReceiptAnchor>>;
 
   /** Marks a chain transaction as handled for a project. False if it already was. */
   claim(projectId: string, signature: string): Promise<boolean>;

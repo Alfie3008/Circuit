@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFingerprint } from "@/components/runtime/fingerprint";
 import { Words } from "@/components/runtime/Words";
-import { api, findWallet, shortWallet } from "@/lib/account/wallet";
+import { api, findWallet, shortWallet, writeRulesToSolana } from "@/lib/account/wallet";
 import { isAddress, solscanAccount } from "@/lib/chain/parse";
 import { explainProgram } from "@/lib/explain/explain";
 import { AI_COST_PER_CALL_USD, DEFAULT_CREATOR_FEE_RATE, FUEL_SHARE } from "@/lib/fuel";
@@ -52,6 +52,8 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
   const [pubError, setPubError] = useState<string | null>(null);
   const [publishedSlug, setPublishedSlug] = useState<string | null>(null);
   const [layout, setLayout] = useState<ProjectSetup["pageLayout"]>(setup.pageLayout ?? "world");
+  const [creator, setCreator] = useState<{ key: string; state: "checking" | "ok" | "other" | "unknown" | "error"; detail?: string } | null>(null);
+  const [onChain, setOnChain] = useState<{ state: "idle" | "wallet" | "confirming" | "done"; version?: number; signature?: string; error?: string }>({ state: "idle" });
   const rules = useMemo(() => (program ? explainProgram(program) : []), [program]);
   const fingerprint = useFingerprint(program);
   const mint = setup.tokenAddress;
@@ -66,8 +68,42 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const coinOk = mode === "none" || isAddress(mint);
+  // The creator check: only the wallet that created the coin can publish its page.
+  const creatorKey = wallet && mode === "coin" && isAddress(mint) ? `${wallet}:${mint}` : null;
+  useEffect(() => {
+    if (!creatorKey || creator?.key === creatorKey) return;
+    let alive = true;
+    const [, coin] = creatorKey.split(":");
+    void (async () => {
+      setCreator({ key: creatorKey, state: "checking" });
+      try {
+        const r = await api<{ creator: string | null; checked: boolean; matches: boolean | null }>(`/api/proof/creator?mint=${coin}`);
+        if (!alive) return;
+        if (!r.checked || r.matches === null) setCreator({ key: creatorKey, state: "unknown", detail: r.checked ? "Couldn't find who created this coin, so the page will say the creator isn't verified." : "This server can't read Solana, so the creator can't be checked." });
+        else setCreator({ key: creatorKey, state: r.matches ? "ok" : "other", detail: r.creator ?? undefined });
+      } catch (e) {
+        if (alive) setCreator({ key: creatorKey, state: "error", detail: e instanceof Error ? e.message : String(e) });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [creatorKey, creator?.key]);
+  const creatorState = creatorKey && creator?.key === creatorKey ? creator.state : creatorKey ? "checking" : null;
+
+  const coinOk = mode === "none" || (isAddress(mint) && creatorState !== "other" && creatorState !== "checking" && creatorState !== "error");
   const ok = [!!wallet && coinOk, true, ack, pub === "done", true];
+
+  const writeOnChain = async () => {
+    if (!current || !program || !publishedSlug) return;
+    setOnChain({ state: "wallet" });
+    try {
+      const r = await writeRulesToSolana(current.id, publishedSlug, program, (stage) => setOnChain({ state: stage }));
+      setOnChain({ state: "done", version: r.version, signature: r.signature });
+    } catch (e) {
+      setOnChain({ state: "idle", error: e instanceof Error ? e.message : String(e) });
+    }
+  };
   const reach = (i: number) => i <= step || ok.slice(0, i).every(Boolean);
 
   const publish = async () => {
@@ -191,9 +227,29 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
                   </div>
                 )}
                 {wallet ? (
-                  <div className="flex items-center gap-2.5 rounded-lg border border-ok/45 bg-ok/[0.07] p-3 text-[14px]">
-                    <span className="text-ok">✓</span>Signed in as {shortWallet(wallet)}.
-                    <span className="text-[12.5px] text-dim">Checking that this wallet created the coin comes with verified rules.</span>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2.5 rounded-lg border border-ok/45 bg-ok/[0.07] p-3 text-[14px]">
+                      <span className="text-ok">✓</span>Signed in as {shortWallet(wallet)}.
+                    </div>
+                    {mode === "coin" && creatorState === "checking" && <p className="m-0 text-[13px] text-dim">Checking on Solana that this wallet created the coin…</p>}
+                    {mode === "coin" && creatorState === "ok" && (
+                      <p className="m-0 text-[13px] text-ok">✓ This wallet created the coin. Its page will say so.</p>
+                    )}
+                    {mode === "coin" && creatorState === "other" && (
+                      <p className="m-0 rounded-lg border border-err/50 bg-err/[0.06] p-3 text-[13px] leading-normal text-fg">
+                        This coin was created by {creator?.detail ? shortWallet(creator.detail) : "another wallet"}, not {shortWallet(wallet)}. Only the creator can publish its page: sign in with
+                        that wallet.
+                      </p>
+                    )}
+                    {mode === "coin" && creatorState === "unknown" && <p className="m-0 text-[13px] text-dim">{creator?.detail}</p>}
+                    {mode === "coin" && creatorState === "error" && (
+                      <p className="m-0 text-[13px] text-err">
+                        {creator?.detail}{" "}
+                        <button onClick={() => setCreator(null)} className="cursor-pointer underline">
+                          Try again
+                        </button>
+                      </p>
+                    )}
                   </div>
                 ) : findWallet() ? (
                   <button
@@ -325,8 +381,34 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
                       <span className="text-ok">✓</span> Published and running on the server.
                     </div>
                     <div className="font-mono text-[11.5px] text-fg-2">
-                      /p/{publishedSlug} · fingerprint {fingerprint} · writing it to Solana comes with verified rules
+                      /p/{publishedSlug} · fingerprint {fingerprint}
                     </div>
+                  </div>
+                )}
+                {pub === "done" && (
+                  <div className="flex flex-col gap-2 rounded-[10px] border border-[#23252a] bg-canvas p-4">
+                    <div className="text-[14.5px] font-medium">Write the fingerprint to Solana</div>
+                    <div className="text-[13px] leading-normal text-fg-2 text-pretty">
+                      Holders can then check the rules on your page are exactly the ones you published, and that you can&apos;t change them quietly. Your wallet signs one
+                      small transaction (network fee only, about 0.000005 SOL). You can also do this later from Publish.
+                    </div>
+                    {onChain.state === "done" ? (
+                      <div className="text-[13.5px]">
+                        <span className="text-ok">✓</span> On Solana as version {onChain.version} ·{" "}
+                        <a href={`https://solscan.io/tx/${onChain.signature}`} target="_blank" rel="noreferrer" className="font-mono text-[12px] text-fg-2 hover:text-signal">
+                          Solscan ↗
+                        </a>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => void writeOnChain()}
+                        disabled={onChain.state !== "idle"}
+                        className="h-[38px] cursor-pointer self-start rounded-lg border border-ok/50 bg-ok/[0.08] px-4 text-[13.5px] text-[oklch(0.86_0.11_155)] hover:bg-ok/[0.16] disabled:opacity-60"
+                      >
+                        {onChain.state === "wallet" ? "Approve it in your wallet…" : onChain.state === "confirming" ? "Waiting for Solana to confirm…" : "Write to Solana"}
+                      </button>
+                    )}
+                    {onChain.error && <p className="m-0 text-[12.5px] text-err">{onChain.error}</p>}
                   </div>
                 )}
                 {pubError && <p className="m-0 whitespace-pre-wrap text-[12.5px] text-err">{pubError}</p>}

@@ -6,7 +6,8 @@
  */
 import type { Program } from "@/lib/ir";
 import { initialState, type Agent, type Entity, type FeedItem, type Receipt, type RuntimeState } from "@/lib/runtime/state";
-import type { Db, ServerProject } from "./types";
+import { anchoringEnabled } from "./anchor";
+import type { Db, ProjectProof, ReceiptAnchor, ServerProject } from "./types";
 
 export interface PublicProject {
   id: string;
@@ -33,12 +34,21 @@ export interface PublicProject {
   };
   status: { liveSince: number | null; lastEventAt: number | null; lastError: string | null; dropped: number };
   receipts: Receipt[];
+  /** Proof on Solana: creator check, rules versions, and which receipts are in an anchored batch. */
+  proof: ProjectProof & { anchoring: boolean; anchors: Record<number, ReceiptAnchor & { status: string; signature: string | null }> };
 }
 
 export async function publicProject(db: Db, slug: string, receiptLimit = 20): Promise<PublicProject | null> {
   const p: ServerProject | null = await db.getProjectBySlug(slug);
   if (!p) return null;
   const [row, receipts] = await Promise.all([db.getState(p.id), db.listReceipts(p.id, receiptLimit)]);
+  const anchors = await db.receiptAnchors(p.id, receipts.map((r) => r.id));
+  const batches = new Map<number, { status: string; signature: string | null }>();
+  for (const a of Object.values(anchors))
+    if (!batches.has(a.batchId)) {
+      const b = await db.getBatch(a.batchId);
+      batches.set(a.batchId, { status: b?.status ?? "pending", signature: b?.signature ?? null });
+    }
   const state = row?.state ?? initialState(1);
   const existing = p.setup.launchMode === "existing";
   return {
@@ -72,5 +82,11 @@ export async function publicProject(db: Db, slug: string, receiptLimit = 20): Pr
       dropped: row?.meta.dropped ?? 0,
     },
     receipts,
+    proof: {
+      creator: p.proof?.creator ?? null,
+      rules: p.proof?.rules ?? [],
+      anchoring: anchoringEnabled(),
+      anchors: Object.fromEntries(Object.entries(anchors).map(([id, a]) => [id, { ...a, ...batches.get(a.batchId)! }])),
+    },
   };
 }
