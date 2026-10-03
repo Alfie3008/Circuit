@@ -73,7 +73,7 @@ export function AiPanel() {
       const res = await aiPost("/api/compile", { prompt: request }, true);
       if (!res.ok) return notify("error", await errorText(res));
       const body = (await res.json()) as { program: Program; explanation: string; source: "claude" | "offline"; model?: string };
-      openProgram(nameFrom(request), body.program);
+      if (!openProgram(nameFrom(request), body.program)) return;
       const how = body.source === "claude" ? `Built by ${body.model}.` : "Built from a saved example (no API key set, so this is the offline demo).";
       notify("info", `${body.explanation}\n${how} Edit anything.`);
       setPrompt("");

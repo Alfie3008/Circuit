@@ -18,7 +18,7 @@ describe(".circuit.json files", () => {
     expect(readProjectFile("not json", "x")).toMatchObject({ ok: false, error: expect.stringContaining("valid JSON") });
     expect(readProjectFile('{"hello":1}', "x")).toMatchObject({ ok: false, error: expect.stringContaining("CIRCUIT project") });
     const bad = JSON.stringify({ format: "circuit", version: 1, program: { scripts: [{ event: { type: "nope" } }] } });
-    expect(readProjectFile(bad, "x")).toMatchObject({ ok: false, error: expect.stringContaining('"nope" is not a CIRCUIT block') });
+    expect(readProjectFile(bad, "x")).toMatchObject({ ok: false, error: expect.stringContaining(`Script 1: uses a block Circuit doesn't have ("nope")`) });
   });
 
   it("uses the file name when the file has no project name", () => {

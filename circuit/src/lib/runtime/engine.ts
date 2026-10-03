@@ -11,7 +11,7 @@ import type { Adapters } from "./adapters";
 import { applyEvent, dispatch, type CircuitEvent, type Match } from "./events";
 import { runScript, type RunContext, type RunResult, type Trace } from "./interpreter";
 import type { Rng } from "./rng";
-import { MAX_FEED, MAX_RUNS, type Receipt, type RuntimeState } from "./state";
+import { MAX_RUNS, trimWorld, type Receipt, type RuntimeState } from "./state";
 
 /** Applies an event to the simulated world and returns the scripts it triggers. */
 export function trigger(state: RuntimeState, program: Program, event: CircuitEvent, rng: Rng): Match[] {
@@ -69,5 +69,5 @@ export function finish(state: RuntimeState, receipt: Receipt, result: Pick<RunRe
   receipt.error = result.error;
   receipt.steps = result.steps;
   receipt.finishedAt = now;
-  if (state.feed.length > MAX_FEED) state.feed.splice(0, state.feed.length - MAX_FEED);
+  trimWorld(state);
 }

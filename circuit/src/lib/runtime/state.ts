@@ -113,6 +113,46 @@ export interface RuntimeState {
 export const MAX_RUNS = 50;
 export const MAX_FEED = 200;
 
+/**
+ * Failsafe limits, so no program (however it's built) can make a world too big
+ * to save, show or run. Hard limits stop the run with a plain message; logs
+ * that grow by themselves keep only their newest entries.
+ */
+export const LIMITS = {
+  /** Characters (roughly) in any one value: a text, list or object. */
+  valueChars: 100_000,
+  agents: 500,
+  entities: 2_000,
+  bounties: 200,
+  /** Distinct names in one table (collections, counters, budgets, website values, an agent's or entity's properties). */
+  keys: 200,
+  /** Newest items kept in each collection, agent memory, agent history and bounty's submissions. */
+  collectionItems: 1_000,
+  memory: 100,
+  history: 100,
+  submissions: 500,
+  /** Lines in one receipt, and characters in one line or detail. */
+  receiptEntries: 600,
+  receiptText: 2_000,
+  /** Whole world, roughly in characters: the server never saves a bigger one. */
+  worldChars: 4_000_000,
+} as const;
+
+const keepNewest = <T>(list: T[], n: number) => {
+  if (list.length > n) list.splice(0, list.length - n);
+};
+
+/** Drops the oldest entries of logs that grow on every run. */
+export function trimWorld(state: RuntimeState) {
+  if (state.feed.length > MAX_FEED) state.feed.splice(0, state.feed.length - MAX_FEED);
+  for (const a of state.agents) {
+    keepNewest(a.memory, LIMITS.memory);
+    keepNewest(a.history, LIMITS.history);
+  }
+  for (const list of Object.values(state.collections)) if (Array.isArray(list)) keepNewest(list, LIMITS.collectionItems);
+  for (const b of state.bounties) keepNewest(b.submissions, LIMITS.submissions);
+}
+
 export function initialState(seed = Date.now() % 2147483647): RuntimeState {
   return {
     version: 1,

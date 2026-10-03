@@ -55,8 +55,36 @@ const isNumericString = (v: unknown): v is string => typeof v === "string" && v.
 let counter = 0;
 export const newId = () => `c${Date.now().toString(36)}${(counter++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+/** Deepest nesting and most nodes a program may have (far past anything built by hand). */
+export const MAX_DEPTH = 150;
+export const MAX_NODES = 20_000;
+
+/** Checks size and nesting without recursion, so hostile input can't overflow the stack. */
+function tooBig(input: unknown): IrIssue | null {
+  const stack: [unknown, number][] = [[input, 0]];
+  let nodes = 0;
+  while (stack.length) {
+    const [v, depth] = stack.pop()!;
+    if (!v || typeof v !== "object") continue;
+    if (depth > MAX_DEPTH) return { path: "", message: `blocks are nested more than ${MAX_DEPTH} deep` };
+    if (++nodes > MAX_NODES) return { path: "", message: `the program is too big (over ${MAX_NODES.toLocaleString("en-US")} parts)` };
+    for (const child of Array.isArray(v) ? v : Object.values(v)) if (child && typeof child === "object") stack.push([child, depth + 1]);
+  }
+  return null;
+}
+
 /** Parse + validate untrusted input (a file, an LLM response). Never throws. */
 export function parseProgram(input: unknown, opts: { makeId?: () => string } = {}): ParseResult {
+  const big = tooBig(input);
+  if (big) return { ok: false, issues: [big] };
+  try {
+    return parseUnchecked(input, opts);
+  } catch (e) {
+    return { ok: false, issues: [{ path: "", message: `the program couldn't be read (${e instanceof Error ? e.message : String(e)})` }] };
+  }
+}
+
+function parseUnchecked(input: unknown, opts: { makeId?: () => string }): ParseResult {
   const parsed = ProgramSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -164,9 +192,69 @@ export function parseProgram(input: unknown, opts: { makeId?: () => string } = {
   return issues.length ? { ok: false, issues } : { ok: true, program };
 }
 
-/** Human-readable summary of issues, for toasts and the AI repair prompt. */
+/** Technical summary of issues, for the AI repair prompt and logs. */
 export const formatIssues = (issues: IrIssue[]) =>
   issues.map((i) => `• ${i.path || "(root)"}: ${i.message}`).join("\n");
+
+const TYPE_WORDS: Record<string, string> = { Number: "a number", String: "text", Boolean: "true/false", List: "a list", Object: "an object", Agent: "an agent" };
+const typeWords = (list: string) =>
+  list
+    .split(" or ")
+    .map((t) => TYPE_WORDS[t] ?? t.toLowerCase())
+    .join(" or ");
+
+/** An issue's message in everyday words. */
+function plainMessage(message: string): string {
+  let m: RegExpExecArray | null;
+  if ((m = /^expects (.+), got (.+)$/.exec(message))) return `needs ${typeWords(m[1])} here, but got ${typeWords(m[2])}`;
+  if ((m = /^"(.+)" is not a CIRCUIT block$/.exec(message))) return `uses a block Circuit doesn't have ("${m[1]}")`;
+  if ((m = /^"(.+)" is a statement, not a value$/.exec(message))) return "has an action block where a value should go";
+  if (/must be the last block in its stack/.test(message)) return "must be the last block in its stack: nothing can come after it";
+  if ((m = /expected (\w+), received (\w+)/i.exec(message))) return `has ${m[2] === "undefined" ? "something missing" : `${m[2]} where ${m[1]} should be`}`;
+  if (/too_big|too big|Too big/.test(message)) return "has a number or text that's too big";
+  if (/too_small|too small|Too small/.test(message)) return "has a number that's too small";
+  return message;
+}
+
+export interface DescribedIssue {
+  /** e.g. "Script 2 · the SET block: needs a number here, but got text" */
+  text: string;
+  /** The block to highlight, when the issue is inside one that has an id. */
+  blockId?: string;
+}
+
+/** Issues in words a person can act on, naming the script and the block. */
+export function describeIssues(input: unknown, issues: IrIssue[]): DescribedIssue[] {
+  return issues.slice(0, 8).map((issue) => {
+    const steps = issue.path.split(/\.|\[(\d+)\]/).filter((x) => x !== undefined && x !== "");
+    let at: unknown = input;
+    let block: IRNode | null = null;
+    let where = "The program";
+    for (let i = 0; i < steps.length; i++) {
+      const k = /^\d+$/.test(steps[i]) ? Number(steps[i]) : steps[i];
+      if (steps[i - 1] === "scripts" && typeof k === "number") where = `Script ${k + 1}`;
+      if (steps[i - 1] === "loose" && typeof k === "number") where = "A loose block";
+      at = at && typeof at === "object" ? (at as Record<PropertyKey, unknown>)[k] : undefined;
+      if (at && typeof at === "object" && !Array.isArray(at) && typeof (at as IRNode).type === "string") block = at as IRNode;
+    }
+    let name = "";
+    try {
+      const spec = block ? resolveSpec(block) : undefined;
+      const label = spec?.rows[0]?.items.find((x) => x.kind === "label");
+      name = label && label.kind === "label" ? label.text.toUpperCase() : spec ? String(block!.type).replace(/_/g, " ").toUpperCase() : "";
+    } catch {
+      // keep the name empty
+    }
+    const text = `${where}${name ? ` · the ${name} block` : ""}: ${plainMessage(issue.message)}`;
+    return { text, ...(block && typeof block.id === "string" ? { blockId: block.id } : {}) };
+  });
+}
+
+/** Issues as a short message for a notice. */
+export const plainIssues = (input: unknown, issues: IrIssue[]) =>
+  describeIssues(input, issues)
+    .map((d) => `• ${d.text}`)
+    .join("\n") + (issues.length > 8 ? `\n…and ${issues.length - 8} more` : "");
 
 /** JSON Schema of the IR (used to constrain the AI compiler in Phase 5). */
 export const programJsonSchema = () => z.toJSONSchema(ProgramSchema, { io: "input", unrepresentable: "any" });

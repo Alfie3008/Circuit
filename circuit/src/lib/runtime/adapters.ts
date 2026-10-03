@@ -196,3 +196,120 @@ export function mockWeb(rng: Rng): WebAdapter {
 }
 
 export const mockAdapters = (rng: Rng): Adapters => ({ ai: mockAi(rng), web: mockWeb(rng), chain: mockChain() });
+
+// ---------------------------------------------------------------------------
+// Failsafe wrapper: every adapter answer is checked before a program sees it
+// ---------------------------------------------------------------------------
+
+/** A service a block needs didn't work. The run stops with this message. */
+export class ServiceError extends Error {}
+
+const reasonOf = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 160);
+const isText = (v: unknown): v is string => typeof v === "string";
+const isPlain = (v: unknown): v is Record<string, Value> => !!v && typeof v === "object" && !Array.isArray(v);
+const textOr = (v: unknown, fallback: string) => (isText(v) ? v : fallback);
+
+/**
+ * Wraps adapters so a program never sees a broken answer:
+ * - AI: a call that fails or answers in the wrong shape gets `fallback`'s
+ *   simple answer instead, and the label says why.
+ * - Web: a failed call stops the run with a plain message (inventing web
+ *   results would be wrong); odd results are cleaned up.
+ * - Chain: a failed read is "unknown" (null).
+ */
+export function guarded(a: Adapters, fallback: AiAdapter): Adapters {
+  let note: string | null = null;
+  const ai = a.ai;
+  async function call<T>(real: () => Promise<unknown>, ok: (v: unknown) => T | null, fall: () => Promise<T>): Promise<T> {
+    try {
+      const v = ok(await real());
+      if (v !== null) {
+        note = null;
+        return v;
+      }
+      note = "the AI's answer wasn't usable";
+    } catch (e) {
+      note = reasonOf(e);
+    }
+    return fall();
+  }
+  const str = (v: unknown) => (isText(v) ? v : null);
+
+  const safeAi: AiAdapter = {
+    get label() {
+      return note ? `fallback (${note})` : ai.label;
+    },
+    ask: (p) => call(() => ai.ask(p), str, () => fallback.ask(p)),
+    structured: (p, fields) => call(() => ai.structured(p, fields), (v) => (isPlain(v) ? v : null), () => fallback.structured(p, fields)),
+    choose: (options, criteria, display) =>
+      call(
+        () => ai.choose(options, criteria, display),
+        (v) => {
+          if (!isPlain(v)) return null;
+          const index = Number(v.index);
+          const valid = options.length ? Number.isInteger(index) && index >= 0 && index < options.length : index === -1;
+          return valid ? { index, reason: textOr(v.reason, "") } : null;
+        },
+        () => fallback.choose(options, criteria, display),
+      ),
+    classify: (text, labels) => call(() => ai.classify(text, labels), str, () => fallback.classify(text, labels)),
+    summarize: (text) => call(() => ai.summarize(text), str, () => fallback.summarize(text)),
+    identity: (subject) =>
+      call(
+        () => ai.identity(subject),
+        (v) => (isPlain(v) && isText(v.name) && v.name.trim() ? { name: v.name, personality: textOr(v.personality, ""), bio: textOr(v.bio, "") } : null),
+        () => fallback.identity(subject),
+      ),
+    decide: (q) => call(() => ai.decide(q), (v) => (typeof v === "boolean" ? v : null), () => fallback.decide(q)),
+    generateText: (kind, topic) => call(() => ai.generateText(kind, topic), str, () => fallback.generateText(kind, topic)),
+    review: (content, criteria) =>
+      call(
+        () => ai.review(content, criteria),
+        (v) => (isPlain(v) && Number.isFinite(Number(v.score)) ? { score: Math.max(0, Math.min(100, Math.round(Number(v.score)))), feedback: textOr(v.feedback, "") } : null),
+        () => fallback.review(content, criteria),
+      ),
+    runAgent: (agent, task, tools, context) => call(() => ai.runAgent(agent, task, tools, context), str, () => fallback.runAgent(agent, task, tools, context)),
+  };
+
+  const web = a.web;
+  const webCall = async <T>(what: string, run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (e) {
+      throw new ServiceError(`${what} didn't work right now (${reasonOf(e)}). The run stopped here; it will work again when the site answers.`);
+    }
+  };
+  const safeWeb: WebAdapter = {
+    get label() {
+      return web.label;
+    },
+    search: (query) =>
+      webCall("The web search", async () => {
+        const r = await web.search(query);
+        return (Array.isArray(r) ? r : []).filter(isPlain).map((x) => ({ title: textOr(x.title, ""), url: textOr(x.url, ""), snippet: textOr(x.snippet, "") }));
+      }),
+    open: (url) =>
+      webCall("Opening that page", async () => {
+        const p = (await web.open(url)) as unknown;
+        if (!isPlain(p)) return { url, title: "", text: "", links: [] };
+        return { url: textOr(p.url, url), title: textOr(p.title, ""), text: textOr(p.text, ""), links: Array.isArray(p.links) ? p.links.filter(isText) : [] };
+      }),
+  };
+
+  const chain = a.chain;
+  const safeChain: ChainAdapter = {
+    get label() {
+      return chain.label;
+    },
+    balance: async (wallet) => {
+      try {
+        const b = await chain.balance(wallet);
+        return typeof b === "number" && Number.isFinite(b) ? b : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+
+  return { ai: safeAi, web: safeWeb, chain: safeChain };
+}

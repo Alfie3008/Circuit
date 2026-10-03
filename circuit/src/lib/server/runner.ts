@@ -24,7 +24,8 @@ import { begin, finish, trigger } from "@/lib/runtime/engine";
 import type { CircuitEvent } from "@/lib/runtime/events";
 import { opAi } from "@/lib/runtime/remoteAi";
 import { hash, Rng } from "@/lib/runtime/rng";
-import { initialState, type RuntimeState } from "@/lib/runtime/state";
+import { initialState, LIMITS, type Receipt, type RuntimeState } from "@/lib/runtime/state";
+import { sizeOf } from "@/lib/runtime/values";
 import { emptyMeta, type Db, type RunMeta, type ServerProject } from "./types";
 
 const envNum = (name: string, fallback: number) => {
@@ -177,32 +178,58 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
         const queue: CircuitEvent[] = [sorted[i]];
         let chain = 0;
         while (queue.length && chain < MAX_CHAIN) {
-          for (const match of trigger(state, project.program, queue.shift()!, rng)) {
-            if (++chain > MAX_CHAIN || window.runs >= limits.runsPerMinute) break;
-            const { receipt, run } = begin(state, match, { rng, adapters, now: clock, raise: (e) => queue.push({ ...e, timestamp: clock() }) });
-            let r = await run.next();
-            while (!r.done) {
-              if (r.value.kind === "wait" && r.value.seconds > 0) {
-                const s = Math.min(r.value.seconds, MAX_WAIT_S, Math.max(0, (limits.timeMs - (clock() - started)) / 1000));
-                if (s < r.value.seconds)
-                  receipt.entries.push({ op: "WAIT", blockId: r.value.id, text: `Server shortened a ${r.value.seconds}s wait to ${Math.round(s)}s`, details: [`Waits on the server are at most ${MAX_WAIT_S}s for now.`], status: "skipped" });
-                await sleep(s * 1000);
+          // Failsafe: whatever goes wrong with one event is recorded, and the next one still runs.
+          let open: Receipt | null = null;
+          try {
+            for (const match of trigger(state, project.program, queue.shift()!, rng)) {
+              if (++chain > MAX_CHAIN || window.runs >= limits.runsPerMinute) break;
+              const { receipt, run } = begin(state, match, { rng, adapters, now: clock, raise: (e) => queue.push({ ...e, timestamp: clock() }) });
+              open = receipt;
+              let r = await run.next();
+              while (!r.done) {
+                if (r.value.kind === "wait" && r.value.seconds > 0) {
+                  const s = Math.min(r.value.seconds, MAX_WAIT_S, Math.max(0, (limits.timeMs - (clock() - started)) / 1000));
+                  if (s < r.value.seconds)
+                    receipt.entries.push({ op: "WAIT", blockId: r.value.id, text: `Server shortened a ${r.value.seconds}s wait to ${Math.round(s)}s`, details: [`Waits on the server are at most ${MAX_WAIT_S}s for now.`], status: "skipped" });
+                  await sleep(s * 1000);
+                }
+                r = await run.next();
               }
-              r = await run.next();
+              finish(state, receipt, r.value, clock());
+              open = null;
+              executions++;
+              window.runs++;
+              if (r.value.status === "error" || r.value.status === "step_limit") errors++;
             }
-            finish(state, receipt, r.value, clock());
-            executions++;
-            window.runs++;
-            if (r.value.status === "error" || r.value.status === "step_limit") errors++;
+          } catch (e) {
+            errors++;
+            const detail = e instanceof Error ? e.message : String(e);
+            meta.lastError = `An event couldn't be handled, so it was skipped: ${detail}`;
+            if (open) {
+              open.entries.push({ op: "ERROR", text: "Something went wrong, so this run stopped safely.", details: [`Detail: ${detail}`], status: "error" });
+              finish(state, open, { status: "error", error: "Something went wrong, so this run stopped safely.", steps: open.steps }, clock());
+            }
           }
         }
       }
 
       state.seed = rng.seed;
+      // Last-resort failsafe: never save a world too big to load again. Keep the last good one.
+      if (sizeOf(state, LIMITS.worldChars) > LIMITS.worldChars) {
+        // `state` was changed in place, so read the stored (last good) copy again.
+        const kept = (await db.getState(projectId))?.state ?? initialState(hash(projectId) % 2147483647);
+        const note = `These runs made the world too big to save (over ${(LIMITS.worldChars / 1e6).toFixed(0)} MB), so their changes were undone. Remove agents, entities or long lists, or reset the world.`;
+        const fresh = state.runs.filter((r) => r.id > firstReceipt);
+        for (const r of fresh) r.entries.push({ op: "ERROR", text: note, details: [], status: "error" });
+        await db.addReceipts(projectId, fresh);
+        kept.executionCount = state.executionCount;
+        Object.assign(state, kept);
+        meta.lastError = note;
+      }
       meta.window = window;
       meta.dropped += dropped;
       meta.lastEventAt = sorted[sorted.length - 1].timestamp;
-      meta.lastError = errors ? (state.runs.findLast((r) => r.error)?.error ?? null) : meta.lastError;
+      meta.lastError = errors ? (state.runs.findLast((r) => r.id > firstReceipt && r.error)?.error ?? meta.lastError) : meta.lastError;
 
       if (realCalls) await db.addAiUsage(projectId, day, realCalls, realCalls * AI_COST_PER_CALL_USD);
       if (!(await db.putState(projectId, state, meta, row?.version ?? 0))) continue; // someone else wrote: redo on fresh state

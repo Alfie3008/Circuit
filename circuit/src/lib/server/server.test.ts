@@ -166,6 +166,29 @@ describe("server runner", () => {
   });
 });
 
+describe("server failsafes", () => {
+  it("a broken stored program records the problem and keeps going instead of throwing", async () => {
+    const db = memoryDb();
+    await publish(db, "broken", { version: 1, variables: [], scripts: [{ event: null, body: [] }], loose: [] } as unknown as Program);
+    const r = await runProject(db, "broken", [trade(1)], { now: () => T0 });
+    expect(r.errors).toBe(1);
+    expect((await db.getState("broken"))!.meta.lastError).toMatch(/couldn't be handled/);
+  });
+
+  it("never saves a world too big to load again: the run's changes are undone and the receipt says why", async () => {
+    const db = memoryDb();
+    const big = "x".repeat(99_000);
+    await publish(db, "huge", program({ version: 1, scripts: [{ event: { type: "every_minutes", minutes: 1 }, body: [{ type: "repeat", times: 50, do: [{ type: "create_entity", entityType: "item", name: big }] }] }] }));
+    const r = await runProject(db, "huge", [{ type: "tick", source: "schedule", timestamp: T0, data: { minutes: 1 } }], { now: () => T0 });
+    expect(r.executions).toBe(1);
+    const row = (await db.getState("huge"))!;
+    expect(row.state.entities).toHaveLength(0);
+    expect(row.meta.lastError).toMatch(/too big to save/);
+    const [receipt] = await db.listReceipts("huge", 1);
+    expect(receipt.entries.at(-1)!.text).toMatch(/too big to save/);
+  });
+});
+
 describe("AI fuel intake", () => {
   afterEach(() => vi.unstubAllGlobals());
 

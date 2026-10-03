@@ -3,7 +3,7 @@
  * input checked here (the browser is never trusted).
  */
 import { z } from "zod";
-import { parseProgram, formatIssues } from "@/lib/ir";
+import { parseProgram, plainIssues } from "@/lib/ir";
 import { readSetup } from "@/lib/project/storage";
 import { isAddress } from "@/lib/chain/parse";
 import { initialState } from "@/lib/runtime/state";
@@ -53,7 +53,7 @@ export async function publish(db: Db, owner: string, input: unknown, now = Date.
   const { id, name } = body.data;
   const slug = checkSlug(body.data.slug);
   const parsed = parseProgram(body.data.program);
-  if (!parsed.ok) throw new ServerError(`The program has errors, so it can't be published:\n${formatIssues(parsed.issues)}`);
+  if (!parsed.ok) throw new ServerError(`The program has a problem, so it can't be published yet:\n${plainIssues(body.data.program, parsed.issues)}`);
   const setup = readSetup(body.data.setup);
   if (setup.launchMode === "existing") {
     if (setup.tokenAddress && !isAddress(setup.tokenAddress)) throw new ServerError("The token address isn't a Solana address.");

@@ -99,3 +99,26 @@ export function compareValues(a: Value | undefined, b: Value | undefined): numbe
 
 /** JSON-safe deep copy for values pulled out of state. */
 export const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
+
+/**
+ * Rough size of a value in characters (texts count their length, everything
+ * else a few). Stops counting past `limit`, so it is cheap on huge values.
+ */
+export function sizeOf(v: unknown, limit = Infinity): number {
+  let n = 0;
+  const stack: unknown[] = [v];
+  while (stack.length && n <= limit) {
+    const x = stack.pop();
+    if (typeof x === "string") n += x.length + 2;
+    else if (Array.isArray(x)) {
+      n += 2;
+      for (const item of x) stack.push(item);
+    } else if (x && typeof x === "object") {
+      for (const [k, item] of Object.entries(x)) {
+        n += k.length + 4;
+        stack.push(item);
+      }
+    } else n += 8;
+  }
+  return n;
+}

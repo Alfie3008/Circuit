@@ -9,12 +9,12 @@
  * the simulation); every effect is written to the receipt.
  */
 import { resolveSpec, type Expr, type IRNode, type Script } from "@/lib/ir";
-import type { Adapters } from "./adapters";
+import { guarded, mockAi, ServiceError, type Adapters } from "./adapters";
 import type { CircuitEvent } from "./events";
 import { listField } from "./events";
 import type { Rng } from "./rng";
 import { hash } from "./rng";
-import type { Agent, Bounty, Entity, Receipt, ReceiptEntry, RunStatus, RuntimeState, Submission } from "./state";
+import { LIMITS, type Agent, type Bounty, type Entity, type Receipt, type ReceiptEntry, type RunStatus, type RuntimeState, type Submission } from "./state";
 import {
   clone,
   compareValues,
@@ -23,6 +23,7 @@ import {
   isRef,
   ref,
   round,
+  sizeOf,
   toList,
   toNumber,
   toText,
@@ -93,6 +94,8 @@ export function labelOf(node: IRNode): string {
 }
 
 const fmt = (n: number) => String(round(n, 4));
+/** Receipt text, shortened to the receipt limit. */
+const clip = (t: string) => (t.length > LIMITS.receiptText ? `${t.slice(0, LIMITS.receiptText)}… (${t.length.toLocaleString("en-US")} characters)` : t);
 const sol = (n: number, unit = "SOL") => `${fmt(n)} ${unit}`;
 
 class Interpreter {
@@ -101,7 +104,12 @@ class Interpreter {
   private current?: IRNode;
   focusAgent: string | null = null;
 
-  constructor(private ctx: RunContext) {}
+  private ctx: RunContext;
+
+  constructor(ctx: RunContext) {
+    // Every adapter answer is checked; a broken AI answer becomes a simple fallback.
+    this.ctx = { ...ctx, adapters: guarded(ctx.adapters, mockAi(ctx.rng)) };
+  }
 
   private get state() {
     return this.ctx.state;
@@ -121,14 +129,39 @@ class Interpreter {
   // -------------------------------------------------------------------------
 
   private log(text: string, details: string[] = [], opts: Partial<ReceiptEntry> = {}, node = this.current) {
-    this.ctx.receipt.entries.push({
+    const entries = this.ctx.receipt.entries;
+    // A receipt stays readable however much a run does: past the limit only errors are added.
+    if (entries.length >= LIMITS.receiptEntries && opts.status !== "error") {
+      if (entries.length === LIMITS.receiptEntries)
+        entries.push({ op: "NOTE", text: `Receipt is full (${LIMITS.receiptEntries} lines). Later steps ran but aren't listed.`, details: [], status: "skipped" });
+      return;
+    }
+    entries.push({
       op: (node?.type ?? "event").toUpperCase(),
       blockId: node?.id,
-      text,
-      details,
+      text: clip(text),
+      details: details.slice(0, 20).map(clip),
       status: "ok",
       ...opts,
     });
+  }
+
+  /** Stops the run if a value is too big to keep, or a number isn't a real number. */
+  private checked(v: Value): Value {
+    if (typeof v === "number" && !Number.isFinite(v)) this.fail("That number is too big to work with.");
+    const big = typeof v === "string" ? v.length > LIMITS.valueChars : typeof v === "object" && v !== null && sizeOf(v, LIMITS.valueChars) > LIMITS.valueChars;
+    if (big) this.fail(`That value is too big (over ${LIMITS.valueChars.toLocaleString("en-US")} characters). The run stopped here so the world stays fast.`);
+    return v;
+  }
+
+  /** Stops the run before a world list grows past its limit. */
+  private room(list: unknown[], limit: number, what: string) {
+    if (list.length >= limit) this.fail(`This world already has ${limit.toLocaleString("en-US")} ${what}, the most it can hold. Remove some before adding more.`);
+  }
+
+  /** Stops the run before a table gets a new name past the limit. */
+  private roomFor(table: Record<string, unknown>, key: string, what: string) {
+    if (!(key in table) && Object.keys(table).length >= LIMITS.keys) this.fail(`There are already ${LIMITS.keys} ${what}, the most allowed. Reuse an existing name.`);
   }
 
   private fail(message: string): never {
@@ -180,10 +213,10 @@ class Interpreter {
 
   async eval(expr: Expr | null | undefined): Promise<Value> {
     if (expr === null || expr === undefined) return null;
-    if (typeof expr === "string") return this.interpolate(expr);
+    if (typeof expr === "string") return this.checked(this.interpolate(expr));
     if (typeof expr === "number" || typeof expr === "boolean") return expr;
     if (Array.isArray(expr)) return [...expr];
-    return this.reporter(expr);
+    return this.checked(await this.reporter(expr));
   }
 
   private async input(node: IRNode, key: string): Promise<Value> {
@@ -407,7 +440,7 @@ class Interpreter {
         const cur = vars[varName()];
         const list = Array.isArray(cur) ? [...cur] : cur === undefined || cur === null || cur === 0 || cur === "" ? [] : [cur];
         list.push(v);
-        vars[varName()] = list;
+        vars[varName()] = this.checked(list);
         this.log(`Added ${this.display(v)} to ${varName()} (${list.length})`);
         return;
       }
@@ -429,6 +462,7 @@ class Interpreter {
 
       // ---- Agents ----
       case "create_agent": {
+        this.room(s.agents, LIMITS.agents, "agents");
         const agent = await this.createAgent(node);
         s.agents.push(agent);
         vars[varName()] = ref("agent", agent.id);
@@ -505,6 +539,7 @@ class Interpreter {
 
       // ---- Media ----
       case "create_card": {
+        this.room(s.entities, LIMITS.entities, "entities");
         const title = await this.text(node, "title");
         const entity: Entity = {
           id: this.newId("card"),
@@ -528,6 +563,7 @@ class Interpreter {
 
       // ---- World ----
       case "create_entity": {
+        this.room(s.entities, LIMITS.entities, "entities");
         const propsVal = await this.input(node, "props");
         const entity: Entity = {
           id: this.newId("entity"),
@@ -548,7 +584,10 @@ class Interpreter {
         const v = await this.input(node, "value");
         if (prop === "name") entity.name = this.display(v);
         else if (prop === "image") entity.image = this.display(v);
-        else entity.props[prop] = v;
+        else {
+          this.roomFor(entity.props, prop, "properties on this entity");
+          entity.props[prop] = v;
+        }
         this.log(`${entity.name}.${prop} = ${this.display(v)}`);
         return;
       }
@@ -569,6 +608,7 @@ class Interpreter {
           this.log("World updated", [`${e.name} is in the world`]);
         } else {
           const name = this.display(item) || "Something";
+          this.room(s.entities, LIMITS.entities, "entities");
           s.entities.push({ id: this.newId("entity"), type: "item", name, props: {}, image: "", createdAt: this.now() });
           this.log("World updated", [`“${name}” added`]);
         }
@@ -577,6 +617,7 @@ class Interpreter {
       case "add_to_collection": {
         const item = await this.input(node, "item");
         const name = this.field(node, "collection") || "collection";
+        this.roomFor(s.collections, name, "collections");
         (s.collections[name] ??= []).push(item);
         this.log(`Added ${this.display(item)} to ${name} (${s.collections[name].length})`);
         return;
@@ -589,6 +630,7 @@ class Interpreter {
       }
       case "update_counter": {
         const name = this.field(node, "name") || "counter";
+        this.roomFor(s.counters, name, "counters");
         const by = await this.num(node, "by");
         const from = s.counters[name] ?? 0;
         s.counters[name] = round(from + by);
@@ -597,6 +639,7 @@ class Interpreter {
       }
       case "website_state": {
         const key = this.field(node, "key") || "key";
+        this.roomFor(s.website, key, "website values");
         const v = await this.input(node, "value");
         s.website[key] = v;
         this.log(`Website ${key} = ${this.display(v)}`);
@@ -622,6 +665,7 @@ class Interpreter {
         const asset = (await this.text(node, "asset")) || "ASSET";
         const amount = await this.num(node, "amount");
         const unit = node.unit === "USDC" ? "USDC" : "SOL";
+        this.roomFor(s.portfolio, asset, "assets in the portfolio");
         this.spend(amount, unit, "Buy");
         s.portfolio[asset] = round((s.portfolio[asset] ?? 0) + amount);
         this.log(`Simulated purchase ${sol(amount, unit)} → ${asset}`, [], { simulated: true });
@@ -642,6 +686,7 @@ class Interpreter {
       case "budget_add": {
         const amount = await this.num(node, "amount");
         const name = this.field(node, "name") || "budget";
+        this.roomFor(s.budgets, name, "budgets");
         this.spend(amount, "SOL", "Budget");
         s.budgets[name] = round((s.budgets[name] ?? 0) + amount);
         this.log(`${sol(amount)} moved from treasury to ${name}`, [`${name}: ${sol(s.budgets[name])}`], { simulated: true });
@@ -667,6 +712,7 @@ class Interpreter {
           if (have < amount) this.fail(`Insufficient budget “${from}”: ${sol(have)} < ${sol(amount)}`);
           s.budgets[from] = round(have - amount);
         }
+        for (const b of into) this.roomFor(s.budgets, b, "budgets");
         const share = round(amount / into.length);
         for (const b of into) s.budgets[b] = round((s.budgets[b] ?? 0) + share);
         this.log(`Split ${sol(amount)} from ${from} into ${into.join(", ")}`, [`${sol(share)} each`], { simulated: true });
@@ -675,6 +721,7 @@ class Interpreter {
 
       // ---- Bounties ----
       case "create_bounty": {
+        this.room(s.bounties, LIMITS.bounties, "bounties");
         const bounty: Bounty = {
           id: this.newId("bounty"),
           title: (await this.text(node, "title")) || "Untitled bounty",
@@ -831,6 +878,7 @@ class Interpreter {
         agent.inventory = toList(v);
         break;
       default:
+        this.roomFor(agent.custom, prop, "properties on this agent");
         agent.custom[prop] = clone(v);
     }
   }
@@ -1170,10 +1218,15 @@ class Interpreter {
         this.log(msg, [], { status: "error" });
         return result("step_limit", msg, { errorBlockId: this.current?.id });
       }
-      const msg = e instanceof Error ? e.message : String(e);
-      const blockId = e instanceof RuntimeError ? e.nodeId : this.current?.id;
-      this.log(msg, [], { status: "error" });
-      return result("error", msg, { errorBlockId: blockId });
+      if (e instanceof RuntimeError || e instanceof ServiceError) {
+        this.log(e.message, [], { status: "error" });
+        return result("error", e.message, { errorBlockId: (e instanceof RuntimeError && e.nodeId) || this.current?.id });
+      }
+      // Anything else is a bug or an edge nobody foresaw: say so plainly, keep the detail.
+      const where = this.current ? `the ${labelOf(this.current)} block` : "this script";
+      const msg = `Something went wrong in ${where}, so this run stopped safely. Nothing else is affected.`;
+      this.log(msg, [`Detail: ${e instanceof Error ? e.message : String(e)}`], { status: "error" });
+      return result("error", msg, { errorBlockId: this.current?.id });
     }
   }
 }

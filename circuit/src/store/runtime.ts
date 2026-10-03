@@ -20,7 +20,7 @@ import type { Frame } from "@/lib/runtime/interpreter";
 import { Rng } from "@/lib/runtime/rng";
 import { initialState, loadRuntime, saveRuntime, type RuntimeState } from "@/lib/runtime/state";
 import { clone, type Value } from "@/lib/runtime/values";
-import { useProjectStore } from "./project";
+import { markBlock, useProjectStore } from "./project";
 
 export type Status = "idle" | "running" | "paused";
 export type Speed = "slow" | "normal" | "fast" | "instant";
@@ -118,8 +118,11 @@ function makeAdapters(rng: Rng, ai: AiStatus | null, chain: ChainStatus | null):
 
 /** The current program, or null (with a notice) if it doesn't validate. */
 function runnableProgram(): Program | null {
-  const { program, irError, notify } = useProjectStore.getState();
-  if (!program) notify("error", `The program has an error, so it can't run yet.\n${irError ?? ""}`);
+  const { program, irError, irBlockId, notify } = useProjectStore.getState();
+  if (!program) {
+    notify("error", `The program has a problem, so it can't run yet.\n${irError ?? ""}`);
+    markBlock("error", irBlockId);
+  }
   return program;
 }
 
@@ -236,6 +239,12 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
         if (get().status === "idle") set({ status: get().debug ? "paused" : "running" });
         await runMatch(job.match, job.program, rng);
       }
+    } catch (e) {
+      // Failsafe: the interpreter reports its own errors on receipts; this is anything else.
+      console.error("[circuit] run failed", e);
+      for (const r of working.runs)
+        if (r.status === "running") finish(working, r, { status: "error", error: "Something went wrong, so this run stopped safely.", steps: r.steps });
+      useProjectStore.getState().notify("error", "Something went wrong running the program, so it was stopped safely. Your blocks are fine; try running it again.");
     } finally {
       queue = [];
       pumping = false;

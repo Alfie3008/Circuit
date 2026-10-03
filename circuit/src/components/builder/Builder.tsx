@@ -2,6 +2,7 @@
 
 import { AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useBuilderUi } from "@/store/builderUi";
 import { AiPanel } from "./AiBar";
 import { ConsolePane } from "./ConsolePane";
@@ -24,20 +25,34 @@ export function Builder() {
 
   return (
     <div className="flex h-dvh min-h-[620px] flex-col overflow-hidden bg-ink text-fg">
-      <BuilderHeader />
+      <ErrorBoundary name="header">
+        <BuilderHeader />
+      </ErrorBoundary>
       <main className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1 bg-canvas">
-            <BlocklyWorkspace />
-            <AiPanel />
-            <AnimatePresence>{irOpen && <IrPanel key="ir" onClose={() => setIr(false)} />}</AnimatePresence>
+            <ErrorBoundary name="block canvas">
+              <BlocklyWorkspace />
+            </ErrorBoundary>
+            <ErrorBoundary name="AI panel">
+              <AiPanel />
+            </ErrorBoundary>
+            <ErrorBoundary name="program view">
+              <AnimatePresence>{irOpen && <IrPanel key="ir" onClose={() => setIr(false)} />}</AnimatePresence>
+            </ErrorBoundary>
           </div>
-          <ConsolePane />
+          <ErrorBoundary name="console">
+            <ConsolePane />
+          </ErrorBoundary>
         </div>
-        <PreviewPanel />
+        <ErrorBoundary name="preview panel" className="w-[360px] shrink-0 border-l border-line">
+          <PreviewPanel />
+        </ErrorBoundary>
       </main>
       <NoticeToast />
-      <Dialogs />
+      <ErrorBoundary name="dialog" className="fixed bottom-4 left-4 z-[400] rounded-lg border border-err/50 bg-panel">
+        <Dialogs />
+      </ErrorBoundary>
     </div>
   );
 }

@@ -3,7 +3,7 @@
  * Circuit IR, so files written by hand or by AI load through the same validator.
  */
 import { z } from "zod";
-import { formatIssues, parseProgram, type Program } from "@/lib/ir";
+import { parseProgram, plainIssues, type Program } from "@/lib/ir";
 
 export const FILE_EXTENSION = ".circuit.json";
 
@@ -31,7 +31,7 @@ export function readProjectFile(text: string, fallbackName: string): ReadFileRes
   const env = Envelope.safeParse(json);
   if (!env.success) return { ok: false, error: "This isn't a CIRCUIT project file (expected format: \"circuit\", version: 1)." };
   const parsed = parseProgram(env.data.program);
-  if (!parsed.ok) return { ok: false, error: `The program in this file is invalid:\n${formatIssues(parsed.issues.slice(0, 8))}` };
+  if (!parsed.ok) return { ok: false, error: `The program in this file has a problem, so it wasn't opened:\n${plainIssues(env.data.program, parsed.issues)}` };
   return { ok: true, name: env.data.name?.trim() || fallbackName, program: parsed.program, setup: env.data.setup };
 }
 

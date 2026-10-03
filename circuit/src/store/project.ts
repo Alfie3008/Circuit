@@ -3,8 +3,10 @@ import { create } from "zustand";
 import { STARTER_PROGRAM } from "@/lib/blocks/starter";
 import {
   blocklyToProgram,
-  formatIssues,
+  describeIssues,
+  IrConversionError,
   parseProgram,
+  plainIssues,
   programToBlockly,
   type Program,
   type WorkspaceState,
@@ -41,6 +43,8 @@ interface ProjectState {
   /** Live Circuit IR of the workspace (null if it doesn't convert). */
   program: Program | null;
   irError: string | null;
+  /** The block the first problem is in, to highlight on the canvas. */
+  irBlockId: string | null;
   stats: { blocks: number; scripts: number };
   canUndo: boolean;
   canRedo: boolean;
@@ -62,7 +66,7 @@ interface ProjectState {
   newFromTemplate: (id: string | null) => void;
   updateSetup: (setup: Partial<ProjectSetup>) => void;
   /** Opens a Circuit IR program (e.g. from Build with AI) as a new project. */
-  openProgram: (name: string, program: Program) => void;
+  openProgram: (name: string, program: Program) => boolean;
   openDialog: (dialog: "templates" | "setup" | "publish" | "golive" | null) => void;
   openProject: (id: string) => void;
   duplicateProject: () => void;
@@ -117,21 +121,27 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   const snapshot = () => {
     const blockly = Blockly.serialization.workspaces.save(ws!) as WorkspaceState;
     try {
-      const parsed = parseProgram(blocklyToProgram(blockly));
+      const ir = blocklyToProgram(blockly);
+      const parsed = parseProgram(ir);
       return parsed.ok
-        ? { blockly, program: parsed.program, irError: null }
-        : { blockly, program: null, irError: formatIssues(parsed.issues) };
+        ? { blockly, program: parsed.program, irError: null, irBlockId: null }
+        : { blockly, program: null, irError: plainIssues(ir, parsed.issues), irBlockId: describeIssues(ir, parsed.issues).find((d) => d.blockId)?.blockId ?? null };
     } catch (e) {
-      return { blockly, program: null, irError: (e as Error).message };
+      const irError =
+        e instanceof IrConversionError
+          ? `${e.message.replace(/^Unknown block type "(.*)"$/, 'The canvas has a block Circuit doesn\'t know ("$1"). Delete it to continue.')}`
+          : `The blocks couldn't be read (${(e as Error).message}). Undo the last change, or delete the block you just added.`;
+      return { blockly, program: null, irError, irBlockId: null };
     }
   };
 
   const refresh = () => {
     if (!ws) return;
-    const { program, irError } = snapshot();
+    const { program, irError, irBlockId } = snapshot();
     set({
       program,
       irError,
+      irBlockId,
       canUndo: ws.getUndoStack().length > 0,
       canRedo: ws.getRedoStack().length > 0,
       stats: {
@@ -174,10 +184,26 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     refresh();
   };
 
-  /** Creates, stores and opens a new project from Blockly state. */
+  /**
+   * Creates, stores and opens a new project from Blockly state. All or nothing:
+   * if the blocks can't be loaded, the canvas goes back to what it was and this
+   * throws, so a half-built canvas is never saved over the previous project.
+   */
   const startProject = (name: string, state: WorkspaceState, needsLayout = false, setup: ProjectSetup = DEFAULT_SETUP) => {
     saveNow();
-    loadInto(state, needsLayout);
+    const previous = ws ? Blockly.serialization.workspaces.save(ws) : null;
+    try {
+      loadInto(state, needsLayout);
+    } catch (e) {
+      if (previous) {
+        try {
+          loadInto(previous as WorkspaceState);
+        } catch {
+          // The previous canvas was valid a moment ago; if even that fails, the stored copy is still intact.
+        }
+      }
+      throw e;
+    }
     set({ setup });
     const now = Date.now();
     createdAt = now;
@@ -224,6 +250,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     saveStatus: "saved",
     program: null,
     irError: null,
+    irBlockId: null,
     stats: { blocks: 0, scripts: 0 },
     canUndo: false,
     canRedo: false,
@@ -266,15 +293,27 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     newFromTemplate: (id) => {
       const template = id ? getTemplate(id) : undefined;
       set({ dialog: null });
-      if (!template) return startProject(untitled(), EMPTY);
-      const { state, needsLayout } = programToBlockly(template.program);
-      startProject(uniqueName(template.name), state, needsLayout);
-      get().notify("info", `${template.name}: ${template.tryIt}`);
+      try {
+        if (!template) return startProject(untitled(), EMPTY);
+        const { state, needsLayout } = programToBlockly(template.program);
+        startProject(uniqueName(template.name), state, needsLayout);
+        get().notify("info", `${template.name}: ${template.tryIt}`);
+      } catch (e) {
+        console.error("[circuit] template failed to open", e);
+        get().notify("error", "That template couldn't be opened. Your current project is unchanged.");
+      }
     },
 
     openProgram: (name, program) => {
-      const { state, needsLayout } = programToBlockly(program);
-      startProject(uniqueName(name), state, needsLayout);
+      try {
+        const { state, needsLayout } = programToBlockly(program);
+        startProject(uniqueName(name), state, needsLayout);
+        return true;
+      } catch (e) {
+        console.error("[circuit] program failed to open", e);
+        get().notify("error", "Those blocks couldn't be put on the canvas. Your current project is unchanged; try again or describe it differently.");
+        return false;
+      }
     },
 
     updateSetup: (patch) => {
@@ -354,14 +393,15 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     },
 
     importProject: async (file) => {
-      const result = readProjectFile(await file.text(), file.name.replace(/\.circuit\.json$|\.json$/i, ""));
-      if (!result.ok) return get().notify("error", result.error);
-      const { state, needsLayout } = programToBlockly(result.program);
       try {
+        if (file.size > 5 * 1024 * 1024) return get().notify("error", "That file is too big to be a Circuit project (over 5 MB).");
+        const result = readProjectFile(await file.text(), file.name.replace(/\.circuit\.json$|\.json$/i, ""));
+        if (!result.ok) return get().notify("error", result.error);
+        const { state, needsLayout } = programToBlockly(result.program);
         startProject(uniqueName(result.name), state, needsLayout, readSetup(result.setup));
         get().notify("info", `Imported "${result.name}".`);
       } catch (e) {
-        get().notify("error", `Couldn't build blocks from this file: ${(e as Error).message}`);
+        get().notify("error", `Couldn't build blocks from this file, so nothing changed. (${(e as Error).message})`);
       }
     },
 
