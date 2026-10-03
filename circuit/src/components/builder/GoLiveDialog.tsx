@@ -306,7 +306,7 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
                   {r &&
                     (r.executions === 0
                       ? `Nothing would have happened. ${r.note ?? ""}`
-                      : `Would have run ${r.executions} times, created ${r.agentsCreated} agents, made ${r.aiCalls} AI calls ≈ $${r.estAiCostUsd.toFixed(2)}, while earning ≈ ${r.estCreatorFeesSol.toFixed(2)} SOL in creator fees.`)}
+                      : `Would have run ${r.executions} time${r.executions === 1 ? "" : "s"}, created ${r.agentsCreated} agent${r.agentsCreated === 1 ? "" : "s"}, made ${r.aiCalls} AI call${r.aiCalls === 1 ? "" : "s"} ≈ $${r.estAiCostUsd.toFixed(2)}, while earning ≈ ${r.estCreatorFeesSol.toFixed(2)} SOL in creator fees.`)}
                   {bt && "source" in bt && <div className="mt-1 font-mono text-[11px] text-dim">Based on {bt.source}.</div>}
                 </div>
                 <button onClick={() => setAck((a) => !a)} className="flex cursor-pointer items-center gap-2.5 text-left text-[14px] text-fg-2">

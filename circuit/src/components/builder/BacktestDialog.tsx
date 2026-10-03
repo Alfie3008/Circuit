@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { XIcon } from "@/components/ui/icons";
+import { RealReceipt } from "@/components/runtime/RealReceipt";
 import { clock, num } from "@/components/runtime/format";
 import { backtest, simulatedHistory, type BacktestResult, type TimelinePoint } from "@/lib/backtest/backtest";
 import { fetchHistory } from "@/lib/chain/client";
@@ -13,16 +13,6 @@ import { useRuntimeStore } from "@/store/runtime";
 // amber for trades that triggered the program.
 const TRADE = "#2473a2";
 const RAN = "#c38300";
-
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-[#23252a] bg-raised px-3 py-2.5">
-      <p className="font-mono text-[10.5px] tracking-[0.1em] text-dim">{label}</p>
-      <p className="mt-0.5 text-[22px] font-semibold tracking-[-0.02em]">{value}</p>
-      {sub && <p className="text-[12px] text-muted">{sub}</p>}
-    </div>
-  );
-}
 
 /** Trades over time as columns (height = SOL); amber where the program ran. */
 function Timeline({ points }: { points: TimelinePoint[] }) {
@@ -127,42 +117,49 @@ function Timeline({ points }: { points: TimelinePoint[] }) {
   );
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 export function BacktestDialog() {
   const program = useProjectStore((s) => s.program);
   const setup = useProjectStore((s) => s.setup);
+  const current = useProjectStore((s) => s.current);
   const chain = useRuntimeStore((s) => s.chainStatus);
   const close = () => useProjectStore.getState().openDialog(null);
   const canReal = !!chain?.enabled;
-  const [source, setSource] = useState<"real" | "sim">(canReal && isAddress(setup.tokenAddress) ? "real" : "sim");
   const [mint, setMint] = useState(setup.tokenAddress);
   const [hours, setHours] = useState(24);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{ label: string; done: number; total: number } | null>(null);
   const [result, setResult] = useState<BacktestResult | null>(null);
+  const [usedSource, setUsedSource] = useState<"real" | "sim">("sim");
   const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && useProjectStore.getState().openDialog(null);
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const run = async () => {
+  const run = async (source: "real" | "sim", window = hours) => {
     if (!program) return setError("The program has an error, so it can't be backtested yet.");
     setError(null);
     setResult(null);
+    setUsedSource(source);
     try {
       let events;
       if (source === "real") {
         if (!isAddress(mint)) return setError("Paste a token mint address.");
-        setBusy("Reading past trades from Solana…");
-        const h = await fetchHistory(mint, hours, hours > 24 ? 1000 : 300);
+        if (!canReal) return setError("This server has no Solana connection (HELIUS_API_KEY or CIRCUIT_SOLANA_RPC_URL), so real trades can't be read.");
+        setBusy({ label: "Reading past trades from Solana…", done: 0, total: 0 });
+        const h = await fetchHistory(mint, window, window > 24 ? 1000 : 300);
         events = h.events;
         if (h.truncated) setError(`Only the most recent ${h.scanned} transactions were read; the window started earlier.`);
       } else {
-        events = simulatedHistory(hours, Date.now() % 100_000);
+        events = simulatedHistory(window, Date.now() % 100_000);
       }
-      setBusy(`Replaying ${events.length} events…`);
-      const r = await backtest(program, events, { onProgress: (d, t) => setBusy(`Replaying ${d} / ${t} events…`) });
+      const label = `Replaying ${events.length.toLocaleString()} events from the last ${window === 24 ? "24 hours" : "7 days"}`;
+      setBusy({ label, done: 0, total: events.length });
+      const r = await backtest(program, events, { onProgress: (done, total) => setBusy({ label, done, total }) });
       setResult(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -171,89 +168,177 @@ export function BacktestDialog() {
     }
   };
 
-  const seg = (on: boolean) => `rounded-md px-2.5 py-1 font-mono text-[11.5px] transition-colors ${on ? "bg-white/10 text-fg" : "text-dim hover:text-fg-2"}`;
+  const card = "flex flex-col gap-4 rounded-xl border border-[#1f2125] bg-panel p-5";
+  const ghost = "h-10 cursor-pointer rounded-lg border border-[#34363c] bg-panel px-4 text-[14px] text-fg hover:bg-white/[0.03]";
+  const pct = busy && busy.total ? Math.round((busy.done / busy.total) * 100) : 0;
+  const window = hours === 24 ? "24 hours" : "7 days";
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div role="dialog" aria-modal="true" aria-label="Backtest" className="flex max-h-[90vh] w-[820px] max-w-full flex-col overflow-hidden rounded-[14px] border border-[#23252a] bg-panel shadow-2xl shadow-black/60">
-        <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <h2 className="font-mono text-[12px] tracking-[0.14em] text-muted">BACKTEST · IF THIS PROGRAM HAD BEEN RUNNING</h2>
-          <button onClick={close} aria-label="Close" className="rounded p-1 text-dim hover:text-fg">
-            <XIcon width={14} height={14} />
-          </button>
-        </header>
-        <div className="flex flex-col gap-4 overflow-y-auto p-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-lg border border-line-2 p-0.5" role="radiogroup" aria-label="Trades to replay">
-              <button role="radio" aria-checked={source === "real"} disabled={!canReal} className={seg(source === "real")} onClick={() => setSource("real")} title={canReal ? "" : "Needs HELIUS_API_KEY or CIRCUIT_SOLANA_RPC_URL"}>
-                Real token
-              </button>
-              <button role="radio" aria-checked={source === "sim"} className={seg(source === "sim")} onClick={() => setSource("sim")}>
-                Simulated market
-              </button>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[rgba(5,6,7,.74)] p-6 backdrop-blur-[6px]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div role="dialog" aria-modal="true" aria-label="Backtest" className="relative max-h-full w-[980px] max-w-full overflow-auto rounded-2xl border border-[#2a2c31] bg-ink">
+        <button onClick={close} aria-label="Close" className="absolute right-[18px] top-4 z-[2] cursor-pointer font-mono text-[12px] text-fg-2 hover:text-fg">
+          ✕
+        </button>
+        <div className="flex min-w-0 flex-col gap-4 px-5 pb-8 pt-6 font-sans text-fg">
+          <div className="flex flex-wrap items-end justify-between gap-3 pr-8">
+            <div>
+              <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-dim">BACKTEST · {current?.name}</div>
+              <h2 className="mt-2 text-[clamp(22px,2.6vw,30px)] font-medium tracking-[-0.03em]">{hours === 24 ? "If this ran yesterday" : "If this ran this week"}</h2>
             </div>
-            {source === "real" && (
-              <input
-                value={mint}
-                onChange={(e) => setMint(e.target.value.trim())}
-                placeholder="Token mint address"
-                aria-label="Token mint address"
-                className="h-8 min-w-0 flex-1 rounded-md border border-line-2 bg-canvas px-2.5 font-mono text-[12px] text-fg placeholder:text-faint focus:border-signal/60 focus:outline-none"
-              />
-            )}
-            <div className="flex rounded-lg border border-line-2 p-0.5" role="radiogroup" aria-label="Window">
-              <button role="radio" aria-checked={hours === 24} className={seg(hours === 24)} onClick={() => setHours(24)}>
-                24 hours
-              </button>
-              <button role="radio" aria-checked={hours === 168} className={seg(hours === 168)} onClick={() => setHours(168)}>
-                7 days
-              </button>
+            <div className="flex gap-0.5 rounded-[7px] border border-[#23252a] bg-canvas p-0.5">
+              {[24, 168].map((h) => (
+                <button
+                  key={h}
+                  onClick={() => setHours(h)}
+                  disabled={!!busy}
+                  className="h-[26px] cursor-pointer rounded-[5px] px-2.5 font-mono text-[11px]"
+                  style={{ background: h === hours ? "#22252a" : "transparent", color: h === hours ? "#e8e6e1" : "#6d7076" }}
+                >
+                  {h === 24 ? "24 hours" : "7 days"}
+                </button>
+              ))}
             </div>
-            <button onClick={() => void run()} disabled={!!busy} className="ml-auto h-8 rounded-md bg-signal px-3.5 font-mono text-[12px] font-medium text-signal-ink hover:brightness-110 disabled:opacity-60">
-              {busy ? "Running…" : "Run backtest"}
-            </button>
           </div>
-          <p className="text-[12.5px] leading-snug text-dim">
-            {source === "real"
-              ? "Replays the token's real past trades through this program. Nothing is sent or spent: AI answers are mocks and finance is simulated. Your project's state isn't touched."
-              : "Replays a plausible trading day for a young coin (bursts, lulls, mostly small trades). Your project's state isn't touched."}
-          </p>
 
-          {busy && <p className="font-mono text-[12px] text-signal">{busy}</p>}
-          {error && <p className="text-[13px] text-err">{error}</p>}
-
-          {result && (
-            <>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2">
-                <Stat label="RUNS" value={String(result.executions)} sub={`from ${result.trades} trades`} />
-                <Stat label="AGENTS CREATED" value={String(result.agentsCreated)} sub={`${result.feedPosts} feed posts`} />
-                <Stat label="AI CALLS" value={String(result.aiCalls)} sub={`≈ $${result.estAiCostUsd.toFixed(3)} with real AI`} />
-                <Stat label="CREATOR FEES" value={`${num(result.estCreatorFeesSol, 3)} SOL`} sub={`est. 0.3% of ${num(result.volumeSol, 1)} SOL volume`} />
+          {!busy && !result && (
+            <div className={card}>
+              <div className="max-w-[560px] text-[15px] leading-normal text-fg-2 text-pretty">
+                Replay real trades from a pump.fun coin through your program. Nothing is sent, bought or written to Solana, and your project&apos;s state isn&apos;t touched.
               </div>
-              {result.note && <p className="rounded-lg border border-line-2 bg-raised p-3 text-[13px] text-fg-2">{result.note}</p>}
-              {result.errors > 0 && <p className="text-[13px] text-err">{result.errors} runs ended in an error. Their receipts below say why.</p>}
-              <Timeline points={result.timeline} />
-              <div>
-                <p className="mb-1.5 font-mono text-[10.5px] tracking-[0.12em] text-dim">WOULD-BE RECEIPTS · LATEST {result.receipts.length}</p>
-                <div className="flex flex-col gap-1">
-                  {[...result.receipts].reverse().map((r) => (
-                    <div key={r.id} className="flex items-center gap-3 rounded-md border border-[#23252a] px-3 py-1.5 font-mono text-[12px]">
-                      <span className="text-dim">{clock(r.startedAt)}</span>
-                      <span className="min-w-0 flex-1 truncate text-fg-2">
-                        {r.event.label} → {r.entries.slice(1).map((e) => e.text).join(" · ")}
-                      </span>
-                      {r.event.proof ? (
-                        <a href={r.event.proof.explorer} target="_blank" rel="noreferrer" className="shrink-0 text-ok hover:underline">
-                          tx ↗
-                        </a>
-                      ) : (
-                        <span className="shrink-0 text-[10.5px] tracking-[0.08em] text-[oklch(0.88_0.13_80)]/80">BACKTEST</span>
-                      )}
+              <div className="flex flex-wrap gap-2">
+                <label className="flex h-[42px] min-w-0 flex-[1_1_260px] items-center gap-2.5 rounded-lg border border-[#2a2c31] bg-canvas px-3">
+                  <span className="font-mono text-[12.5px] text-dim">MINT</span>
+                  <input
+                    value={mint}
+                    onChange={(e) => setMint(e.target.value.trim())}
+                    placeholder="Paste a mint address…"
+                    className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-fg placeholder:text-faint focus:outline-none"
+                  />
+                </label>
+                <button onClick={() => void run("real")} className="h-[42px] cursor-pointer rounded-lg bg-signal px-[18px] text-[14px] font-medium text-signal-ink hover:brightness-[1.08]">
+                  Run backtest
+                </button>
+              </div>
+              {!canReal && <p className="-mt-2 m-0 font-mono text-[11px] text-dim">This server can&apos;t read Solana yet (no HELIUS_API_KEY or CIRCUIT_SOLANA_RPC_URL). The simulated market works without one.</p>}
+              <div className="font-mono text-[10.5px] tracking-[0.12em] text-dim">OR PICK ONE</div>
+              <div className="flex flex-col gap-1.5">
+                {isAddress(setup.tokenAddress) && (
+                  <button
+                    onClick={() => {
+                      setMint(setup.tokenAddress);
+                      void run("real");
+                    }}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-signal/35 bg-canvas px-3 py-2.5 text-left hover:border-signal/50"
+                  >
+                    <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-[#2a2c31] font-mono text-[10px] text-[oklch(0.86_0.1_80)]">
+                      {(current?.name ?? "C").slice(0, 2).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px]">
+                        {current?.name} {setup.tokenSymbol && <span className="font-mono text-[11.5px] text-dim">${setup.tokenSymbol}</span>}
+                      </div>
+                      <div className="font-mono text-[11px] text-faint">{setup.tokenAddress.slice(0, 4)}…{setup.tokenAddress.slice(-4)} · real trades</div>
                     </div>
-                  ))}
-                </div>
+                    <span className="font-mono text-[11px] text-dim">YOURS</span>
+                  </button>
+                )}
+                <button onClick={() => void run("sim")} className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#23252a] bg-canvas px-3 py-2.5 text-left hover:border-signal/50">
+                  <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-[#2a2c31] font-mono text-[10px] text-[oklch(0.86_0.1_80)]">SM</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px]">Simulated market</div>
+                    <div className="font-mono text-[11px] text-faint">A plausible {window} for a young coin: bursts, lulls, mostly small trades</div>
+                  </div>
+                  <span className="font-mono text-[11px] text-dim">NO KEY NEEDED</span>
+                </button>
               </div>
-            </>
+              {error && <p className="m-0 text-[13px] text-err">{error}</p>}
+            </div>
+          )}
+
+          {busy && (
+            <div className={card}>
+              <div className="flex flex-wrap justify-between gap-3 text-[15px]">
+                <span>{busy.label}</span>
+                <span className="font-mono text-[13px] text-signal">{busy.total ? `${pct}%` : "…"}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-[3px] bg-[#1d1f23]">
+                <div className="h-full bg-signal transition-[width] duration-200" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="font-mono text-[12px] text-dim">
+                {busy.done.toLocaleString()} / {busy.total.toLocaleString()} events · AI answers are mocks, so this costs nothing
+              </div>
+            </div>
+          )}
+
+          {result && result.executions === 0 && (
+            <div className={card}>
+              <div className="text-[clamp(18px,2vw,22px)] font-medium tracking-[-0.02em]">Nothing would have happened.</div>
+              <div className="max-w-[620px] text-[14.5px] leading-[1.55] text-fg-2 text-pretty">
+                {result.note ?? "None of the program's events happened in this window."} {result.trades.toLocaleString()} trades and {num(result.volumeSol, 1)} SOL of volume in the last {window}.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {hours === 24 && (
+                  <button
+                    onClick={() => {
+                      setHours(168);
+                      void run(usedSource, 168);
+                    }}
+                    className={ghost}
+                  >
+                    Replay 7 days instead
+                  </button>
+                )}
+                <button onClick={() => setResult(null)} className={ghost}>
+                  Try another coin
+                </button>
+              </div>
+            </div>
+          )}
+
+          {result && result.executions > 0 && (
+            <div className={card}>
+              <p className="m-0 text-[clamp(17px,2vw,21px)] leading-normal tracking-[-0.01em] text-pretty">
+                Would have run <b className="font-medium text-signal">{plural(result.executions, "time")}</b>, created{" "}
+                <b className="font-medium text-signal">{plural(result.agentsCreated, "agent")}</b>, made{" "}
+                <b className="font-medium">
+                  {plural(result.aiCalls, "AI call")} ≈ ${result.estAiCostUsd.toFixed(2)}
+                </b>
+                , while earning <b className="font-medium text-ok">≈ {num(result.estCreatorFeesSol, 2)} SOL</b> in creator fees.
+              </p>
+              <div className="font-mono text-[10.5px] tracking-[0.1em] text-dim">
+                {result.trades.toLocaleString()} TRADES · {usedSource === "real" ? "REAL TRADES" : "SIMULATED MARKET"} · CREATOR FEES ESTIMATED AT 0.3%
+              </div>
+              {result.errors > 0 && <p className="m-0 text-[13px] text-err">{result.errors} runs ended in an error. Their receipts below say why.</p>}
+              {error && <p className="m-0 text-[13px] text-[oklch(0.88_0.13_80)]">{error}</p>}
+              <Timeline points={result.timeline} />
+              <div className="flex flex-col gap-1.5">
+                <div className="font-mono text-[10.5px] tracking-[0.12em] text-dim">WOULD-BE RECEIPTS</div>
+                {[...result.receipts]
+                  .reverse()
+                  .slice(0, 6)
+                  .map((r) =>
+                    openId === r.id ? (
+                      <div key={r.id} onClick={() => setOpenId(null)} className="cursor-pointer">
+                        <RealReceipt r={r} backtest />
+                      </div>
+                    ) : (
+                      <RealReceipt key={r.id} r={r} size="row" backtest onOpen={() => setOpenId(r.id)} />
+                    ),
+                  )}
+                {result.executions > 6 && <span className="py-1 font-mono text-[11px] text-dim">+ {result.executions - 6} more</span>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => useProjectStore.getState().openDialog("golive")}
+                  className="h-10 cursor-pointer rounded-lg bg-signal px-4 text-[14px] font-medium text-signal-ink hover:brightness-[1.08]"
+                >
+                  Continue to go live →
+                </button>
+                <button onClick={() => setResult(null)} className={ghost}>
+                  Try another coin
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

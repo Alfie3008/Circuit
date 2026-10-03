@@ -7,7 +7,7 @@ import { clock, runNo } from "./format";
 const short = (s: string) => (s.length > 12 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s);
 
 /** A real run's receipt in the design's receipt card: real trigger, steps, status and proof. */
-export function RealReceipt({ r, size = "full", onOpen }: { r: Receipt; size?: "full" | "card" | "row"; onOpen?: () => void }) {
+export function RealReceipt({ r, size = "full", onOpen, backtest }: { r: Receipt; size?: "full" | "card" | "row"; onOpen?: () => void; backtest?: boolean }) {
   const steps = r.entries.slice(1).map((e) => ({ label: e.text, sim: e.simulated }));
   const failAt = r.entries.slice(1).findIndex((e) => e.status === "error");
   const status =
@@ -15,8 +15,8 @@ export function RealReceipt({ r, size = "full", onOpen }: { r: Receipt; size?: "
   const proof = r.event.proof;
   const kind = r.event.source;
   const d = r.event.data;
-  const source = proof ? "live" : "sim";
-  const sourceLabel = proof
+  const source = backtest ? "backtest" : proof ? "live" : "sim";
+  const sourceLabel = proof || backtest
     ? undefined
     : kind === "runtime"
       ? "RAISED BY THE PROGRAM"
@@ -60,7 +60,7 @@ export function RealReceipt({ r, size = "full", onOpen }: { r: Receipt; size?: "
       line={r.event.label}
       trigger={{ verb: r.event.label, amount: r.event.type === "trade" ? amount : undefined, by }}
       sub={sub}
-      naText={proof ? "Real transaction · receipt not yet anchored on Solana (coming with verified receipts)" : source === "sim" && kind !== "schedule" && kind !== "runtime" ? "Simulated run · not written to Solana" : "Not written to Solana"}
+      naText={backtest ? "Backtest · would-be receipt, not written to Solana" : proof ? "Real transaction · receipt not yet anchored on Solana (coming with verified receipts)" : source === "sim" && kind !== "schedule" && kind !== "runtime" ? "Simulated run · not written to Solana" : "Not written to Solana"}
       countText={`${r.steps} ${r.steps === 1 ? "step" : "steps"}`}
       onOpen={onOpen}
     />
