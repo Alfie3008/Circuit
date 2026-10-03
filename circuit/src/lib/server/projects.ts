@@ -92,6 +92,7 @@ export const SettingsSchema = z.object({
   live: z.boolean().optional(),
   aiDailyUsd: z.number().min(0).max(1000).optional(),
   reset: z.literal(true).optional(),
+  layout: z.enum(["world", "gallery", "feed", "website"]).optional(),
 });
 
 export interface SettingsResult {
@@ -107,6 +108,7 @@ export async function updateSettings(db: Db, owner: string, id: string, input: u
   const s = body.data;
 
   if (s.reset) await db.resetState(id);
+  if (s.layout) project.setup = { ...project.setup, pageLayout: s.layout };
   if (s.aiDailyUsd !== undefined) project.aiDailyUsd = Math.min(s.aiDailyUsd, runLimits().projectAiMaxUsd);
 
   const starting = s.live === true && !project.live;

@@ -49,7 +49,7 @@ interface ProjectState {
   /** Block selected on the canvas (for the plain-English view). */
   selectedBlockId: string | null;
   /** Open dialog, if any. */
-  dialog: "templates" | "setup" | "backtest" | "publish" | null;
+  dialog: "templates" | "setup" | "backtest" | "publish" | "golive" | null;
 
   attach: (ws: Blockly.WorkspaceSvg) => void;
   detach: () => void;
@@ -63,7 +63,7 @@ interface ProjectState {
   updateSetup: (setup: Partial<ProjectSetup>) => void;
   /** Opens a Circuit IR program (e.g. from Build with AI) as a new project. */
   openProgram: (name: string, program: Program) => void;
-  openDialog: (dialog: "templates" | "setup" | "backtest" | "publish" | null) => void;
+  openDialog: (dialog: "templates" | "setup" | "backtest" | "publish" | "golive" | null) => void;
   openProject: (id: string) => void;
   duplicateProject: () => void;
   renameProject: (name: string) => void;

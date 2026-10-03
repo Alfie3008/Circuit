@@ -18,6 +18,7 @@ export interface PublicProject {
   token: string | null;
   wallet: string | null;
   symbol: string;
+  layout: "world" | "gallery" | "feed" | "website";
   createdAt: number;
   updatedAt: number;
   program: Program;
@@ -50,6 +51,7 @@ export async function publicProject(db: Db, slug: string, receiptLimit = 20): Pr
     token: existing && p.setup.tokenAddress ? p.setup.tokenAddress : null,
     wallet: existing && p.setup.walletAddress ? p.setup.walletAddress : null,
     symbol: p.setup.tokenSymbol ?? "",
+    layout: p.setup.pageLayout ?? "world",
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     program: p.program,

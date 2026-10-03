@@ -80,7 +80,7 @@ export function BuilderHeader() {
         <SaveButton />
         <RunButton />
         <button
-          onClick={() => openDialog("publish")}
+          onClick={() => openDialog("golive")}
           title="Give this project a public page, and run it on the server"
           className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-[7px] border border-ok/55 bg-ok/10 px-3.5 font-mono text-[12px] font-semibold tracking-[0.04em] text-[oklch(0.88_0.11_155)] transition-colors hover:bg-ok/20"
         >

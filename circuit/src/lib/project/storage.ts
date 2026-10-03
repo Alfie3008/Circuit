@@ -26,6 +26,8 @@ export interface ProjectSetup {
   /** Launch with Circuit (prototype only, nothing is launched). */
   tokenName: string;
   tokenSymbol: string;
+  /** How the public page shows the world. */
+  pageLayout: "world" | "gallery" | "feed" | "website";
 }
 
 export const DEFAULT_SETUP: ProjectSetup = {
@@ -36,6 +38,7 @@ export const DEFAULT_SETUP: ProjectSetup = {
   executionBudget: 1,
   tokenName: "",
   tokenSymbol: "",
+  pageLayout: "world",
 };
 
 /** Fills gaps in a stored setup (older projects have none). */

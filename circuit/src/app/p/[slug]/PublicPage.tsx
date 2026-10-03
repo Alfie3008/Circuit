@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { alpha, ERR, OK, SIG, VAL } from "@/components/proof/tokens";
 import { artFor, clock } from "@/components/runtime/format";
+import { useFingerprint } from "@/components/runtime/fingerprint";
 import { RealReceipt } from "@/components/runtime/RealReceipt";
 import { Words } from "@/components/runtime/Words";
 import { LogoMark } from "@/components/site/Logo";
@@ -33,22 +34,6 @@ function ago(t: number | null, now: number | null) {
 
 const date = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const text = (v: Value | undefined) => (v === null || v === undefined ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
-
-/** SHA-256 of the program, first 8 hex characters: the rules' fingerprint, worked out in the browser. */
-function useFingerprint(program: unknown) {
-  const [fp, setFp] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const bytes = new TextEncoder().encode(JSON.stringify(program));
-    void crypto.subtle?.digest("SHA-256", bytes).then((d) => {
-      if (alive) setFp([...new Uint8Array(d)].slice(0, 4).map((b) => b.toString(16).padStart(2, "0")).join(""));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [program]);
-  return fp;
-}
 
 /** What the page says about itself, honestly. */
 function pageState(v: PublicProject) {
@@ -98,7 +83,7 @@ export function PublicPage({ initial }: { initial: PublicProject }) {
   }, []);
   const at = (t: number, len = 8) => (now === null ? "" : clock(t).slice(0, len));
   const [stale, setStale] = useState(false);
-  const [layout, setLayout] = useState<Layout>("world");
+  const [layout, setLayout] = useState<Layout>(initial.layout ?? "world");
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState<Receipt | null>(null);
 

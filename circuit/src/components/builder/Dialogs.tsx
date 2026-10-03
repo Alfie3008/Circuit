@@ -8,6 +8,7 @@ import { TEMPLATES } from "@/lib/templates";
 import { hueColour } from "@/lib/ui/colour";
 import { useProjectStore } from "@/store/project";
 import { BacktestDialog } from "./BacktestDialog";
+import { GoLiveGate } from "./GoLiveGate";
 import { PublishDialog } from "./PublishDialog";
 
 /** Category tags of the blocks a program uses, in order of first use. */
@@ -160,5 +161,6 @@ export function Dialogs() {
   if (dialog === "setup") return <SetupDialog />;
   if (dialog === "backtest") return <BacktestDialog />;
   if (dialog === "publish") return <PublishDialog />;
+  if (dialog === "golive") return <GoLiveGate />;
   return null;
 }
