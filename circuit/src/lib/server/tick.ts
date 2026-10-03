@@ -4,7 +4,7 @@
  */
 import { chainProvider, pool } from "@/lib/chain/rpc";
 import type { CircuitEvent } from "@/lib/runtime/events";
-import { claimNew, pollProject, watchedAddresses } from "./chainFeed";
+import { intake, pollProject, watchedAddresses } from "./chainFeed";
 import { webhooksConfigured } from "./helius";
 import { runProject, type RunOptions, type RunSummary } from "./runner";
 import { timerEvents } from "./schedule";
@@ -44,7 +44,7 @@ export async function tick(db: Db, opts: RunOptions & { poll?: boolean } = {}): 
       if (!meta.lastPollAt || started - meta.lastPollAt >= pollEveryMs) {
         try {
           const r = await pollProject(p, meta);
-          chain = await claimNew(db, p.id, r.events);
+          chain = await intake(db, p, r.events, started);
           cursor = r.cursor;
         } catch (e) {
           pollError = e instanceof Error ? e.message : String(e);

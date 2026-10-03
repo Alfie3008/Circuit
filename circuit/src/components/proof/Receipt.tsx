@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { alpha, ERR, OK, SIG, simChip, VAL, valuePill } from "./tokens";
+import { alpha, ERR, OK, SIG, simChip, valuePill } from "./tokens";
 
 export interface ReceiptStep {
   label: string;
@@ -12,7 +12,7 @@ export interface ReceiptStep {
 
 export interface ReceiptProps {
   size?: "full" | "card" | "row";
-  source?: "live" | "sim" | "backtest";
+  source?: "live" | "sim";
   status?: "complete" | "error" | "stopped" | "limit" | "running";
   /** Forced to "na" unless the source is live. */
   proof?: "anchored" | "pending" | "na";
@@ -101,7 +101,7 @@ export function Receipt(p: ReceiptProps) {
     limit: ["STEP LIMIT", "50 / 50 steps", SIG, "LIMIT"],
     running: ["RUNNING", `${prog} / ${n}`, SIG, "RUNNING"],
   }[status];
-  const src = { live: ["LIVE · SOLANA", "LIVE", OK], sim: ["SIMULATED", "SIM", SIG], backtest: ["BACKTEST", "BACKTEST", VAL] }[source];
+  const src = { live: ["LIVE · SOLANA", "LIVE", OK], sim: ["SIMULATED", "SIM", SIG] }[source];
   if (p.sourceLabel) src[0] = p.sourceLabel;
   const srcColor = src[2];
   const amount = p.amount ?? (source === "sim" ? "+10 SOL" : "10.4 SOL");
@@ -153,7 +153,7 @@ export function Receipt(p: ReceiptProps) {
             </span>
           ) : (
             <span className="inline-flex flex-wrap items-center gap-1.5 font-sans text-[13.5px] text-fg">
-              {source === "sim" ? "Simulator ·" : source === "backtest" ? "Replay · Buy" : "Buy ·"} <span className={valuePill}>{amount}</span>
+              {source === "sim" ? "Simulator ·" : "Buy ·"} <span className={valuePill}>{amount}</span>
               <span className="text-fg-2">{source === "sim" ? "volume signal" : `by ${wallet}`}</span>
             </span>
           )}
@@ -162,11 +162,7 @@ export function Receipt(p: ReceiptProps) {
         {!card && p.sub === undefined && (
           <div className="flex flex-wrap gap-2 text-[11px] text-dim">
             <span>
-              {source === "sim"
-                ? "Sent from the builder · no Solana transaction"
-                : source === "backtest"
-                  ? "Yesterday 14:02 · tx 5Kd9…wQ2r ·"
-                  : `tx ${p.tx ?? "5Kd9…wQ2r"} · slot 312,884,019 ·`}
+              {source === "sim" ? "Sent from the builder · no Solana transaction" : `tx ${p.tx ?? "5Kd9…wQ2r"} · slot 312,884,019 ·`}
             </span>
             {source !== "sim" && <span className="border-b border-[#3a3d43] text-fg-2">Solscan ↗</span>}
           </div>
@@ -253,7 +249,7 @@ export function Receipt(p: ReceiptProps) {
           </>
         )}
         {proof === "na" && (
-          <span className="flex-1">{p.naText ?? (source === "sim" ? "Simulated run · not written to Solana" : "Backtest · would-be receipt, not written to Solana")}</span>
+          <span className="flex-1">{p.naText ?? "Simulated run · not written to Solana"}</span>
         )}
       </div>
     </div>

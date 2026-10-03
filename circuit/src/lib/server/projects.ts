@@ -10,7 +10,6 @@ import { initialState } from "@/lib/runtime/state";
 import { hash } from "@/lib/runtime/rng";
 import { invalidateLive } from "./chainFeed";
 import { syncWebhook, type SyncResult } from "./helius";
-import { runLimits } from "./runner";
 import { emptyMeta, ServerError, type Db, type ServerProject } from "./types";
 
 const RESERVED = new Set(["new", "edit", "admin", "api", "app", "circuit", "settings", "login", "about", "help", "p"]);
@@ -77,7 +76,6 @@ export async function publish(db: Db, owner: string, input: unknown, now = Date.
     program: parsed.program,
     setup,
     live: existing?.live ?? false,
-    aiDailyUsd: existing?.aiDailyUsd ?? 1,
     timezone,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -90,7 +88,6 @@ export async function publish(db: Db, owner: string, input: unknown, now = Date.
 
 export const SettingsSchema = z.object({
   live: z.boolean().optional(),
-  aiDailyUsd: z.number().min(0).max(1000).optional(),
   reset: z.literal(true).optional(),
   layout: z.enum(["world", "gallery", "feed", "website"]).optional(),
 });
@@ -100,7 +97,7 @@ export interface SettingsResult {
   webhook?: SyncResult;
 }
 
-/** Owner settings: go live / stop, AI cap, reset the world. */
+/** Owner settings: go live / stop, page layout, reset the world. */
 export async function updateSettings(db: Db, owner: string, id: string, input: unknown, now = Date.now()): Promise<SettingsResult> {
   const body = SettingsSchema.safeParse(input);
   if (!body.success) throw new ServerError("Those settings aren't valid.");
@@ -109,7 +106,6 @@ export async function updateSettings(db: Db, owner: string, id: string, input: u
 
   if (s.reset) await db.resetState(id);
   if (s.layout) project.setup = { ...project.setup, pageLayout: s.layout };
-  if (s.aiDailyUsd !== undefined) project.aiDailyUsd = Math.min(s.aiDailyUsd, runLimits().projectAiMaxUsd);
 
   const starting = s.live === true && !project.live;
   const stopping = s.live === false && project.live;

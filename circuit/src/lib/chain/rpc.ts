@@ -167,28 +167,6 @@ export async function pollEvents(
   return { events, cursor, walletCursor, scanned: sigs.length };
 }
 
-/** Events for `mint` over the past `hours` (oldest first), capped at `max` transactions. */
-export async function history(opts: { mint: string; hours: number; max: number }, f?: Fetcher): Promise<EventsResult & { truncated: boolean }> {
-  if (!isAddress(opts.mint)) throw new ChainError("That isn't a Solana token address.", 400);
-  const cutoff = Date.now() / 1000 - opts.hours * 3600;
-  const sigs: SignatureInfo[] = [];
-  let before: string | undefined;
-  let truncated = false;
-  while (sigs.length < opts.max) {
-    const page = await getSignatures(opts.mint, { before, limit: Math.min(1000, opts.max - sigs.length) }, f);
-    if (!page.length) break;
-    for (const s of page) {
-      if ((s.blockTime ?? 0) < cutoff) return { events: await eventsFor(sigs, opts.mint, undefined, f), cursor: sigs[0]?.signature ?? null, scanned: sigs.length, truncated };
-      sigs.push(s);
-    }
-    const last = page[page.length - 1].signature;
-    if (last === before) break; // a misbehaving RPC repeating a page: stop rather than loop
-    before = last;
-  }
-  truncated = sigs.length >= opts.max;
-  return { events: await eventsFor(sigs, opts.mint, undefined, f), cursor: sigs[0]?.signature ?? null, scanned: sigs.length, truncated };
-}
-
 /** Holder count via Helius DAS getTokenAccounts (Helius only). Capped at 20 pages. */
 export async function holderCount(mint: string, f?: Fetcher): Promise<{ holders: number; capped: boolean }> {
   if (chainProvider() !== "helius") throw new ChainError("Holder counts need a Helius key (DAS API).", 501);

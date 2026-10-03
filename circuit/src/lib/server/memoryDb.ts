@@ -14,7 +14,7 @@ interface Data {
   states: Record<string, StateRow>;
   receipts: Record<string, Record<number, Receipt>>;
   seen: Record<string, string[]>;
-  usage: Record<string, { calls: number; usd: number }>;
+  usage: Record<string, { calls: number; usd: number; feesUsd?: number }>;
 }
 
 /** Signatures remembered per project (oldest are forgotten). */
@@ -134,6 +134,21 @@ export function memoryDb(file?: string): Db {
         }
       }
       return { calls, usd };
+    },
+    async addFees(projectId, day, usd) {
+      const u = (data.usage[`${projectId}|${day}`] ??= { calls: 0, usd: 0 });
+      u.feesUsd = (u.feesUsd ?? 0) + usd;
+      persist();
+    },
+    async fuelTotals(projectId) {
+      const t = { feesUsd: 0, spentUsd: 0, calls: 0 };
+      for (const [k, u] of Object.entries(data.usage)) {
+        if (k.split("|")[0] !== projectId) continue;
+        t.feesUsd += u.feesUsd ?? 0;
+        t.spentUsd += u.usd;
+        t.calls += u.calls;
+      }
+      return t;
     },
   };
 }

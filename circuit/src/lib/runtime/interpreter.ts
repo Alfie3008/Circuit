@@ -433,7 +433,8 @@ class Interpreter {
         s.agents.push(agent);
         vars[varName()] = ref("agent", agent.id);
         this.focusAgent = agent.id;
-        this.log(`Agent ${agent.name} created`, [`ID ${agent.id}`, `Species ${agent.species}`, `Personality ${agent.personality}`]);
+        const usedAi = [node.nameMode, node.identityMode, node.personalityMode, node.speciesMode].includes("ai_generated");
+        this.log(`Agent ${agent.name} created`, [`ID ${agent.id}`, `Species ${agent.species}`, `Personality ${agent.personality}`, ...(usedAi ? [`AI: ${this.ctx.adapters.ai.label}`] : [])]);
         return;
       }
       case "run_agent": {
@@ -766,7 +767,7 @@ class Interpreter {
     const generated = node.nameMode === "ai_generated" || node.identityMode === "ai_generated" || node.personalityMode === "ai_generated"
       ? await ai.identity(species)
       : null;
-    const name = node.nameMode === "manual" ? this.field(node, "name") || "Agent" : generated!.name;
+    const name = node.nameMode === "manual" ? this.field(node, "name") || "Agent" : generated?.name || "Agent";
     const identity = node.identityMode === "custom" ? this.field(node, "identity") : (generated?.bio ?? "");
     const personality = node.personalityMode === "free_text" ? this.field(node, "personality") : (generated?.personality ?? "");
     const custom = await this.input(node, "custom");

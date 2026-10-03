@@ -18,7 +18,6 @@ const project = (id: string, over: Partial<ServerProject> = {}): ServerProject =
   program: getTemplate("living-crew")!.program,
   setup: { ...DEFAULT_SETUP, launchMode: "existing", tokenAddress: "Mint111111111111111111111111111111111111111" },
   live: true,
-  aiDailyUsd: 1,
   timezone: "UTC",
   createdAt: 1,
   updatedAt: 1,
@@ -97,6 +96,18 @@ function contract(name: string, make: () => Promise<Db>) {
       expect(all.calls).toBe(8);
       expect(all.usd).toBeCloseTo(0.008);
       expect((await db.aiUsage(null, "2026-10-03")).calls).toBe(0);
+    });
+
+    it("adds up AI fuel: fees earned and AI spent, all time, per project", async () => {
+      await db.addFees("f", "2026-10-01", 0.5);
+      await db.addFees("f", "2026-10-02", 0.25);
+      await db.addAiUsage("f", "2026-10-02", 3, 0.003);
+      await db.addFees("b", "2026-10-02", 9);
+      const t = await db.fuelTotals("f");
+      expect(t.feesUsd).toBeCloseTo(0.75);
+      expect(t.spentUsd).toBeCloseTo(0.003);
+      expect(t.calls).toBe(3);
+      expect(await db.fuelTotals("nobody")).toEqual({ feesUsd: 0, spentUsd: 0, calls: 0 });
     });
 
     it("reset and delete remove a project's world", async () => {

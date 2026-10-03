@@ -4,11 +4,16 @@
  * - pulled: the cron polls each project's token and wallet (the fallback when
  *   no webhook is set up, and a periodic safety net when one is)
  * Every event is claimed (signature + type) before it runs, so a transaction
- * that arrives both ways runs once.
+ * that arrives both ways runs once. Claiming is also where the coin's creator
+ * fees are counted (AI fuel), from every trade, before events the program
+ * doesn't watch are set aside.
  */
 import { involvedAddresses, parseTransaction, type RpcTransaction } from "@/lib/chain/parse";
 import { getSolUsd, getSupply, pollEvents } from "@/lib/chain/rpc";
+import { feesUsd } from "@/lib/fuel";
 import type { CircuitEvent } from "@/lib/runtime/events";
+import { toNumber } from "@/lib/runtime/values";
+import { today } from "./runner";
 import type { Db, RunMeta, ServerProject } from "./types";
 
 // --- live projects by address (cached briefly) -------------------------------
@@ -51,16 +56,16 @@ async function supplyOf(mint: string): Promise<number> {
   return value;
 }
 
-/** A project's events in one transaction (honouring its monitor settings). */
+/** A project's events in one transaction (all of them: see `intake`). */
 export async function projectEvents(tx: RpcTransaction, p: ServerProject): Promise<CircuitEvent[]> {
   const mint = p.setup.tokenAddress;
   const wallet = p.setup.monitor.wallet ? p.setup.walletAddress || undefined : undefined;
   const needsPrice = involvedAddresses(tx).has(mint);
   const [supply, price] = needsPrice ? await Promise.all([supplyOf(mint), getSolUsd()]) : [0, { value: 0 }];
-  return filterMonitored(parseTransaction(tx, { mint, wallet, supply, solUsd: price.value }), p);
+  return parseTransaction(tx, { mint, wallet, supply, solUsd: price.value });
 }
 
-const filterMonitored = (events: CircuitEvent[], p: ServerProject) =>
+export const filterMonitored = (events: CircuitEvent[], p: ServerProject) =>
   events.filter((e) => e.type !== "trade" || p.setup.monitor.trades || p.setup.monitor.volume);
 
 /** Keeps the events this project hasn't run yet, and marks them as run. */
@@ -70,6 +75,27 @@ export async function claimNew(db: Db, projectId: string, events: CircuitEvent[]
     if (!e.proof || (await db.claim(projectId, `${e.proof.signature}:${e.type}`))) out.push(e);
   }
   return out;
+}
+
+/**
+ * New chain events for a project: claims them (each runs once), adds the
+ * creator fees their trades earned to the project's AI fuel, and returns the
+ * ones the program watches. Fee counting never stops a run.
+ */
+export async function intake(db: Db, p: ServerProject, events: CircuitEvent[], now = Date.now()): Promise<CircuitEvent[]> {
+  const fresh = await claimNew(db, p.id, events);
+  const sol = fresh
+    .filter((e) => e.type === "trade" && e.source === "live" && e.data.token === p.setup.tokenAddress)
+    .reduce((s, e) => s + Math.max(0, toNumber(e.data.amount)), 0);
+  if (sol > 0) {
+    try {
+      const usd = feesUsd(sol, (await getSolUsd()).value);
+      if (usd > 0) await db.addFees(p.id, today(now), usd);
+    } catch (e) {
+      console.error("[circuit] couldn't record creator fees", p.id, e);
+    }
+  }
+  return filterMonitored(fresh, p);
 }
 
 // --- polling -----------------------------------------------------------------
@@ -82,7 +108,7 @@ export async function pollProject(p: ServerProject, meta: RunMeta): Promise<{ ev
   const wallet = p.setup.monitor.wallet ? p.setup.walletAddress || undefined : undefined;
   const r = await pollEvents({ mint: p.setup.tokenAddress, wallet, until: meta.cursor.mint, walletUntil: meta.cursor.wallet, limit: 50 });
   return {
-    events: filterMonitored(r.events, p),
+    events: r.events,
     cursor: { mint: r.cursor ?? meta.cursor.mint, wallet: r.walletCursor ?? meta.cursor.wallet },
   };
 }

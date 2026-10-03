@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fuelOf } from "@/lib/fuel";
 import { parseProgram, formatIssues, type Program } from "@/lib/ir";
 import { DEFAULT_SETUP } from "@/lib/project/storage";
 import type { CircuitEvent } from "@/lib/runtime/events";
 import { getTemplate } from "@/lib/templates";
-import { claimNew } from "./chainFeed";
+import { claimNew, intake } from "./chainFeed";
 import { memoryDb } from "./memoryDb";
 import { runProject } from "./runner";
 import { localClock, timerEvents } from "./schedule";
@@ -27,7 +28,6 @@ async function publish(db: Db, id: string, prog: Program, over: Partial<ServerPr
     program: prog,
     setup: { ...DEFAULT_SETUP },
     live: true,
-    aiDailyUsd: 1,
     timezone: "Europe/London",
     createdAt: T0,
     updatedAt: T0,
@@ -131,9 +131,25 @@ describe("server runner", () => {
     expect(receipt.status).toBe("complete");
   });
 
-  it("stops spending on AI at the project's daily cap", async () => {
+  it("without creator fees, AI blocks use fallbacks and spend nothing", async () => {
     const db = memoryDb();
-    await publish(db, "ai", crew(), { aiDailyUsd: 0.0025 }); // room for 2 calls at $0.001
+    await publish(db, "dry", crew());
+    let calls = 0;
+    const caller = async () => {
+      calls++;
+      return "{}";
+    };
+    const r = await runProject(db, "dry", [trade(10)], { now: () => T0, caller });
+    expect(r.executions).toBe(1);
+    expect(calls).toBe(0);
+    const [receipt] = await db.listReceipts("dry", 1);
+    expect(receipt.entries.some((e) => /no creator fees|fuel is empty/i.test(`${e.text} ${(e.details ?? []).join(" ")}`))).toBe(true);
+  });
+
+  it("spends at most 90% of the creator fees earned on AI", async () => {
+    const db = memoryDb();
+    await publish(db, "ai", crew());
+    await db.addFees("ai", "2026-10-02", 0.0025 / 0.9); // fuel for 2 calls at $0.001
     let calls = 0;
     const caller = async () => {
       calls++;
@@ -146,6 +162,26 @@ describe("server runner", () => {
     expect((await db.aiUsage("ai", "2026-10-02")).calls).toBe(2);
     const names = (await db.getState("ai"))!.state.agents.map((a) => a.name);
     expect(names.filter((n) => n.startsWith("Real"))).toHaveLength(2);
+    expect(fuelOf(await db.fuelTotals("ai")).callsLeft).toBe(0);
+  });
+});
+
+describe("AI fuel intake", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("counts creator fees from every claimed trade once, then keeps only watched events", async () => {
+    vi.stubGlobal("fetch", async () => Response.json({ So11111111111111111111111111111111111111112: { usdPrice: 200 } }));
+    const db = memoryDb();
+    const mint = "MintAddress1111111111111111111111111111111";
+    await publish(db, "coin", crew(), { setup: { ...DEFAULT_SETUP, launchMode: "existing", tokenAddress: mint, monitor: { ...DEFAULT_SETUP.monitor, trades: false, volume: false } } });
+    const p = (await db.getProject("coin"))!;
+    const t = (amount: number, sig: string): CircuitEvent => ({ ...trade(amount, T0, sig), data: { amount, side: "buy", wallet: "w", token: mint } });
+
+    const kept = await intake(db, p, [t(10, "s1"), t(5, "s2")], T0);
+    expect(kept).toEqual([]); // the program doesn't watch trades…
+    expect((await db.fuelTotals("coin")).feesUsd).toBeCloseTo(15 * 0.003 * 200); // …but their fees still count
+    await intake(db, p, [t(10, "s1")], T0); // a redelivery counts nothing
+    expect((await db.fuelTotals("coin")).feesUsd).toBeCloseTo(9);
   });
 });
 

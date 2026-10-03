@@ -66,7 +66,7 @@ const slowAi = async () => {
       await pool(Array.from({ length: n }, (_, i) => i), 16, async (i) => {
         const id = `${kind}-${i}`;
         ids[kind].push(id);
-        await db.saveProject({ id, slug: id, owner: "Owner", name: id, program, setup: { ...DEFAULT_SETUP }, live: true, aiDailyUsd: 1, timezone: "UTC", createdAt: T0, updatedAt: T0 });
+        await db.saveProject({ id, slug: id, owner: "Owner", name: id, program, setup: { ...DEFAULT_SETUP }, live: true, timezone: "UTC", createdAt: T0, updatedAt: T0 });
         await db.putState(id, initialState(i + 1), { ...emptyMeta(), liveSince: T0 }, 0);
       });
     }

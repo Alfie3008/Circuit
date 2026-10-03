@@ -42,12 +42,6 @@ export function pollChain(opts: { mint: string; wallet?: string; until?: string 
   return getJson<PollResult>(`/api/chain/events?${q}`);
 }
 
-export function fetchHistory(mint: string, hours: number, max = 300) {
-  return getJson<{ events: CircuitEvent[]; scanned: number; truncated: boolean }>(
-    `/api/chain/history?${new URLSearchParams({ mint, hours: String(hours), max: String(max) })}`,
-  );
-}
-
 export function fetchHolders(mint: string) {
   return getJson<{ holders: number; capped: boolean }>(`/api/chain/holders?${new URLSearchParams({ mint })}`);
 }

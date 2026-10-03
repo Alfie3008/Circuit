@@ -5,7 +5,7 @@ import { DocsBody } from "./DocsBody";
 
 export const metadata: Metadata = {
   title: "Docs · How Circuit proves it",
-  description: "Receipts, sources, checking on Solana, rules and versions, plain English, backtests, going live, AI fuel and public pages.",
+  description: "Receipts, sources, checking on Solana, rules and versions, plain English, going live, AI fuel and public pages.",
 };
 
 export default function DocsPage() {

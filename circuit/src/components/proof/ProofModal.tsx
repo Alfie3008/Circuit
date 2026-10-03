@@ -27,7 +27,7 @@ const VERIFY = {
   },
 };
 
-export type ProofView = { type: "receipt"; kind: "live" | "error" | "sim" | "backtest" } | { type: "verify"; kind: "receipt" | "rules" };
+export type ProofView = { type: "receipt"; kind: "live" | "error" | "sim" } | { type: "verify"; kind: "receipt" | "rules" };
 
 /**
  * Receipt viewer and the four-step "check it on Solana" walkthrough.
@@ -71,7 +71,7 @@ export function ProofModal({ view, onClose, example }: { view: ProofView | null;
             </button>
           </div>
           <Receipt
-            source={view.kind === "sim" ? "sim" : view.kind === "backtest" ? "backtest" : "live"}
+            source={view.kind === "sim" ? "sim" : "live"}
             status={view.kind === "error" ? "error" : "complete"}
             onVerify={() => {
               setStep(0);

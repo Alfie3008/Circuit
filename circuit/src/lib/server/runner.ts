@@ -10,10 +10,12 @@
  *   extra events are dropped and counted
  * - a time budget per invocation (CIRCUIT_RUN_TIME_MS, default 20 s)
  * - the engine's own step / repeat / chain caps per execution
- * - AI spend: the project's daily USD cap and the server's (CIRCUIT_AI_DAILY_USD);
- *   past either, AI blocks get mock answers and the receipt says so
+ * - AI spend: the project's AI fuel (90% of the creator fees its coin has
+ *   earned, minus what its AI already spent) and the server's daily ceiling
+ *   (CIRCUIT_AI_DAILY_USD); past either, AI blocks get fallback answers and the
+ *   receipt says so
  */
-import { AI_COST_PER_CALL_USD } from "@/lib/backtest/backtest";
+import { AI_COST_PER_CALL_USD, fuelOf } from "@/lib/fuel";
 import { chainProvider, getSolBalance } from "@/lib/chain/rpc";
 import { aiConfigured, anthropicCaller, runtimeModel, type ModelCaller } from "@/lib/ai/model";
 import { runOp } from "@/lib/ai/runtime";
@@ -33,7 +35,6 @@ export const runLimits = () => ({
   runsPerMinute: envNum("CIRCUIT_RUNS_PER_MINUTE", 60),
   timeMs: envNum("CIRCUIT_RUN_TIME_MS", 20_000),
   serverAiDailyUsd: envNum("CIRCUIT_AI_DAILY_USD", 5),
-  projectAiMaxUsd: envNum("CIRCUIT_AI_PROJECT_MAX_USD", 5),
 });
 
 /** Executions one event (with what it raises) may cause, as in the browser. */
@@ -136,20 +137,21 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
         continue;
       }
 
-      // AI budget for today, read once per run.
+      // AI fuel and the server's ceiling, read once per run.
       const day = today(started);
       let realCalls = 0;
-      let used = { project: 0, server: 0 };
+      let fuelLeft = 0;
+      let serverUsed = 0;
       const caller = opts.caller ?? (aiConfigured() ? anthropicCaller() : null);
       if (caller) {
-        const [p, s] = await Promise.all([db.aiUsage(projectId, day), db.aiUsage(null, day)]);
-        used = { project: p.usd, server: s.usd };
+        const [totals, s] = await Promise.all([db.fuelTotals(projectId), db.aiUsage(null, day)]);
+        fuelLeft = fuelOf(totals).leftUsd;
+        serverUsed = s.usd;
       }
-      const projectCap = Math.min(project.aiDailyUsd, limits.projectAiMaxUsd);
       const allowance = () => {
-        const spent = realCalls * AI_COST_PER_CALL_USD;
-        if (used.server + spent + AI_COST_PER_CALL_USD > limits.serverAiDailyUsd) return "server's daily AI budget used";
-        if (used.project + spent + AI_COST_PER_CALL_USD > projectCap) return "project's daily AI budget used";
+        const spent = (realCalls + 1) * AI_COST_PER_CALL_USD;
+        if (spent > fuelLeft + 1e-9) return fuelLeft > 0 || project.setup.launchMode === "existing" ? "AI fuel is empty until the coin earns more creator fees" : "no coin connected, so no creator fees to pay for AI";
+        if (serverUsed + spent > limits.serverAiDailyUsd + 1e-9) return "Circuit's daily AI limit is reached; back tomorrow";
         return null;
       };
 

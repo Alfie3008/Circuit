@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { field, label, Modal } from "@/components/ui/Modal";
 import { api, findWallet, shortWallet } from "@/lib/account/wallet";
+import { FUEL_SHARE, type Fuel } from "@/lib/fuel";
 import type { Program } from "@/lib/ir";
 import type { ProjectSetup } from "@/lib/project/storage";
 import type { RunMeta } from "@/lib/server/types";
@@ -11,10 +12,11 @@ import { useProjectStore } from "@/store/project";
 import { clock } from "@/components/runtime/format";
 
 interface Owned {
-  project: { id: string; slug: string; name: string; live: boolean; aiDailyUsd: number; timezone: string; updatedAt: number; program: Program; setup: ProjectSetup };
+  project: { id: string; slug: string; name: string; live: boolean; timezone: string; updatedAt: number; program: Program; setup: ProjectSetup };
   status: Partial<RunMeta> & { executions: number };
   aiToday: { calls: number; usd: number };
-  limits: { runsPerMinute: number; projectAiMaxUsd: number };
+  fuel: Fuel;
+  limits: { runsPerMinute: number };
 }
 
 interface ServerStatus {
@@ -75,7 +77,6 @@ export function PublishDialog() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [server, setServer] = useState<ServerStatus | null>(null);
-  const [cap, setCap] = useState("");
 
   useEffect(() => {
     if (wallet === undefined) void refresh();
@@ -92,7 +93,6 @@ export function PublishDialog() {
       return () => {
         setOwned(owned);
         setSlug(owned.project.slug);
-        setCap(String(owned.project.aiDailyUsd));
         setForeign(false);
         setLoading(false);
       };
@@ -226,15 +226,24 @@ export function PublishDialog() {
                 </p>
               )}
 
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="w-44">
-                  <label className={label} htmlFor="cap">AI SPEND CAP ($ / DAY)</label>
-                  <input id="cap" type="number" min={0} max={owned.limits.projectAiMaxUsd} step={0.5} className={field} value={cap} onChange={(e) => setCap(e.target.value)} />
+              <div className="rounded-lg border border-line px-3 py-2.5">
+                <div className="flex items-baseline justify-between gap-3 font-mono text-[11.5px]">
+                  <span className="text-dim">AI FUEL</span>
+                  <span className={owned.fuel.state === "empty" ? "text-err" : owned.fuel.state === "low" ? "text-[oklch(0.88_0.13_80)]" : "text-ok"}>
+                    ${owned.fuel.leftUsd.toFixed(2)} left · ≈ {owned.fuel.callsLeft.toLocaleString()} AI calls
+                  </span>
                 </div>
-                <button disabled={!!busy || Number(cap) === owned.project.aiDailyUsd} onClick={() => void act("cap", () => settings({ aiDailyUsd: Math.max(0, Number(cap) || 0) }))} className={ghost}>
-                  Save cap
-                </button>
-                <span className="pb-2 text-[11.5px] text-dim">Past the cap, AI blocks answer with mock text until tomorrow.</span>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
+                  <div
+                    className={`h-full rounded-full ${owned.fuel.state === "empty" ? "bg-err" : owned.fuel.state === "low" ? "bg-signal" : "bg-ok"}`}
+                    style={{ width: `${owned.fuel.capUsd > 0 ? Math.min(100, (owned.fuel.leftUsd / owned.fuel.capUsd) * 100) : 0}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-[11.5px] leading-snug text-dim">
+                  {watches
+                    ? `${Math.round(FUEL_SHARE * 100)}% of the ≈ $${owned.fuel.feesUsd.toFixed(2)} in creator fees earned since going live, minus $${owned.fuel.spentUsd.toFixed(2)} spent. When it runs out, AI blocks use simple fallbacks until more trades come in.`
+                    : "No coin connected, so there are no creator fees: AI blocks use simple fallbacks. Connect a coin in Project setup to give it real AI."}
+                </p>
               </div>
 
               <div className="flex gap-2 border-t border-line pt-3">

@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   return handle(async () => {
     const owner = requireWallet(req);
     const projects = await getDb().listProjects({ owner, limit: 100 });
-    return Response.json({ projects: projects.map(({ id, slug, name, live, aiDailyUsd, updatedAt }) => ({ id, slug, name, live, aiDailyUsd, updatedAt })) });
+    return Response.json({ projects: projects.map(({ id, slug, name, live, updatedAt }) => ({ id, slug, name, live, updatedAt })) });
   });
 }
 
@@ -19,6 +19,6 @@ export async function POST(req: Request) {
     const owner = requireWallet(req);
     rateLimit(`publish:${owner}`, 20);
     const project = await publish(getDb(), owner, await readJson(req));
-    return Response.json({ project: { id: project.id, slug: project.slug, live: project.live, aiDailyUsd: project.aiDailyUsd } });
+    return Response.json({ project: { id: project.id, slug: project.slug, live: project.live } });
   });
 }

@@ -66,9 +66,6 @@ export function BuilderHeader() {
       <div className="flex shrink-0 items-center gap-1.5">
         <AiStatus />
         {divider}
-        <button className={btn} onClick={() => openDialog("backtest")} title="If this program had been running…">
-          Backtest
-        </button>
         <button
           className={`${btn} hidden min-[1240px]:block ${debug ? "border-signal/55 bg-signal/10 text-[oklch(0.88_0.13_80)] hover:bg-signal/15" : ""}`}
           onClick={() => setDebug(!debug)}

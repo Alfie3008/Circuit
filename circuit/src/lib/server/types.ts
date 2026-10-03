@@ -3,6 +3,7 @@
  * owner (a wallet); a published project has a public page at /p/<slug> and,
  * when `live`, runs on the server on real events and timers.
  */
+import type { FuelTotals } from "@/lib/fuel";
 import type { Program } from "@/lib/ir";
 import type { ProjectSetup } from "@/lib/project/storage";
 import type { Receipt, RuntimeState } from "@/lib/runtime/state";
@@ -17,8 +18,6 @@ export interface ServerProject {
   setup: ProjectSetup;
   /** Running on the server (events and timers), not just published. */
   live: boolean;
-  /** Most the project's AI blocks may spend per day (USD). */
-  aiDailyUsd: number;
   /** IANA time zone for "at time" scripts, e.g. Europe/London. */
   timezone: string;
   createdAt: number;
@@ -86,6 +85,10 @@ export interface Db {
   addAiUsage(projectId: string, day: string, calls: number, usd: number): Promise<void>;
   /** AI usage on a day, for one project or (null) the whole server. */
   aiUsage(projectId: string | null, day: string): Promise<{ calls: number; usd: number }>;
+  /** Records creator fees (USD) a project's coin earned on a day: its AI fuel. */
+  addFees(projectId: string, day: string, usd: number): Promise<void>;
+  /** All-time fees earned and AI spent for a project. */
+  fuelTotals(projectId: string): Promise<FuelTotals>;
 
   close?(): Promise<void>;
 }

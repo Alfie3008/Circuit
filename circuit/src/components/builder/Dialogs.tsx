@@ -7,7 +7,6 @@ import type { ProjectSetup } from "@/lib/project/storage";
 import { TEMPLATES } from "@/lib/templates";
 import { hueColour } from "@/lib/ui/colour";
 import { useProjectStore } from "@/store/project";
-import { BacktestDialog } from "./BacktestDialog";
 import { GoLiveGate } from "./GoLiveGate";
 import { PublishDialog } from "./PublishDialog";
 
@@ -159,7 +158,6 @@ export function Dialogs() {
   const dialog = useProjectStore((s) => s.dialog);
   if (dialog === "templates") return <TemplatePicker />;
   if (dialog === "setup") return <SetupDialog />;
-  if (dialog === "backtest") return <BacktestDialog />;
   if (dialog === "publish") return <PublishDialog />;
   if (dialog === "golive") return <GoLiveGate />;
   return null;

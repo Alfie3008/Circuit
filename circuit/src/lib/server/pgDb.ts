@@ -22,7 +22,6 @@ create table if not exists circuit.projects (
   program jsonb not null,
   setup jsonb not null,
   live boolean not null default false,
-  ai_daily_usd double precision not null default 1,
   timezone text not null default 'UTC',
   created_at bigint not null,
   updated_at bigint not null
@@ -61,6 +60,9 @@ create table if not exists circuit.ai_usage (
   usd double precision not null default 0,
   primary key (project_id, day)
 );
+-- AI fuel: creator fees the coin earned that day (USD).
+alter table circuit.ai_usage add column if not exists fees_usd double precision not null default 0;
+-- (Older databases also have projects.ai_daily_usd, a chosen AI cap that is no longer used.)
 `;
 
 type Row = Record<string, unknown>;
@@ -73,7 +75,6 @@ const toProject = (r: Row): ServerProject => ({
   program: r.program as Program,
   setup: readSetup(r.setup),
   live: r.live as boolean,
-  aiDailyUsd: Number(r.ai_daily_usd),
   timezone: r.timezone as string,
   createdAt: Number(r.created_at),
   updatedAt: Number(r.updated_at),
@@ -116,11 +117,11 @@ export function pgDb(url: string): Db {
     }),
     saveProject: (p) => q(async () => {
       await sql`
-        insert into circuit.projects (id, slug, owner, name, program, setup, live, ai_daily_usd, timezone, created_at, updated_at)
-        values (${p.id}, ${p.slug}, ${p.owner}, ${p.name}, ${json(p.program)}, ${json(p.setup)}, ${p.live}, ${p.aiDailyUsd}, ${p.timezone}, ${p.createdAt}, ${p.updatedAt})
+        insert into circuit.projects (id, slug, owner, name, program, setup, live, timezone, created_at, updated_at)
+        values (${p.id}, ${p.slug}, ${p.owner}, ${p.name}, ${json(p.program)}, ${json(p.setup)}, ${p.live}, ${p.timezone}, ${p.createdAt}, ${p.updatedAt})
         on conflict (id) do update set
           slug = excluded.slug, owner = excluded.owner, name = excluded.name, program = excluded.program,
-          setup = excluded.setup, live = excluded.live, ai_daily_usd = excluded.ai_daily_usd,
+          setup = excluded.setup, live = excluded.live,
           timezone = excluded.timezone, updated_at = excluded.updated_at`;
     }),
     deleteProject: (id) => q(async () => {
@@ -197,6 +198,17 @@ export function pgDb(url: string): Db {
         select coalesce(sum(calls), 0)::int as calls, coalesce(sum(usd), 0)::float8 as usd
         from circuit.ai_usage where day = ${day} ${projectId !== null ? sql`and project_id = ${projectId}` : sql``}`;
       return { calls: Number(r.calls), usd: Number(r.usd) };
+    }),
+    addFees: (projectId, day, usd) => q(async () => {
+      await sql`
+        insert into circuit.ai_usage (project_id, day, fees_usd) values (${projectId}, ${day}, ${usd})
+        on conflict (project_id, day) do update set fees_usd = circuit.ai_usage.fees_usd + excluded.fees_usd`;
+    }),
+    fuelTotals: (projectId) => q(async () => {
+      const [r] = await sql`
+        select coalesce(sum(fees_usd), 0)::float8 as fees, coalesce(sum(usd), 0)::float8 as usd, coalesce(sum(calls), 0)::int as calls
+        from circuit.ai_usage where project_id = ${projectId}`;
+      return { feesUsd: Number(r.fees), spentUsd: Number(r.usd), calls: Number(r.calls) };
     }),
 
     close: () => sql.end({ timeout: 5 }),

@@ -1,11 +1,12 @@
 /**
  * GET    /api/projects/:id                  → owner's view (settings, status)
- * PATCH  /api/projects/:id { live?, aiDailyUsd?, reset? }
+ * PATCH  /api/projects/:id { live?, reset?, layout? }
  * DELETE /api/projects/:id                  → unpublish (the page goes away)
  */
 import { getDb } from "@/lib/server/db";
 import { handle, rateLimit, readJson, requireWallet } from "@/lib/server/http";
 import { ownProject, unpublish, updateSettings } from "@/lib/server/projects";
+import { fuelOf } from "@/lib/fuel";
 import { runLimits, today } from "@/lib/server/runner";
 
 export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]">) {
@@ -16,11 +17,12 @@ export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]">)
     // Not published yet is a normal answer here, not an error.
     if (!(await db.getProject(id))) return Response.json({ project: null });
     const p = await ownProject(db, owner, id);
-    const [row, usage] = await Promise.all([db.getState(id), db.aiUsage(id, today())]);
+    const [row, usage, totals] = await Promise.all([db.getState(id), db.aiUsage(id, today()), db.fuelTotals(id)]);
     return Response.json({
-      project: { id: p.id, slug: p.slug, name: p.name, live: p.live, aiDailyUsd: p.aiDailyUsd, timezone: p.timezone, updatedAt: p.updatedAt, program: p.program, setup: p.setup },
+      project: { id: p.id, slug: p.slug, name: p.name, live: p.live, timezone: p.timezone, updatedAt: p.updatedAt, program: p.program, setup: p.setup },
       status: { ...(row?.meta ?? {}), executions: row?.state.executionCount ?? 0 },
       aiToday: usage,
+      fuel: fuelOf(totals),
       limits: runLimits(),
     });
   });
@@ -32,7 +34,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/projects/[id]"
     rateLimit(`settings:${owner}`, 30);
     const { id } = await ctx.params;
     const { project, webhook } = await updateSettings(getDb(), owner, id, await readJson(req, 4096));
-    return Response.json({ project: { id: project.id, slug: project.slug, live: project.live, aiDailyUsd: project.aiDailyUsd }, webhook });
+    return Response.json({ project: { id: project.id, slug: project.slug, live: project.live }, webhook });
   });
 }
 

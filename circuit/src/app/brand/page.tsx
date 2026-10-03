@@ -20,7 +20,7 @@ const CORE = [
 const STATES = [
   ["Live", "oklch(0.80 0.13 155)", "Real, complete"],
   ["Error", "oklch(0.68 0.19 25)", "Failed steps"],
-  ["Value", "oklch(0.86 0.06 235)", "Variables, backtest"],
+  ["Value", "oklch(0.86 0.06 235)", "Variables"],
   ["Deep signal", DEEP, "#E58E00 · signal on paper"],
   ["Dim", "#6D7076", "Labels, meta"],
 ];

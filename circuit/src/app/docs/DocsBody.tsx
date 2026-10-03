@@ -2,22 +2,21 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { BacktestExample } from "@/components/proof/BacktestExample";
 import { FuelMeter } from "@/components/proof/FuelMeter";
 import { ProofModal, type ProofView } from "@/components/proof/ProofModal";
 import { Receipt } from "@/components/proof/Receipt";
 import { WatchRun } from "@/components/proof/WatchRun";
 import { Words } from "@/components/runtime/Words";
 import { explainProgram } from "@/lib/explain/explain";
+import { FUEL_SHARE } from "@/lib/fuel";
 import { getTemplate } from "@/lib/templates";
 
 const TOC: [string, string][] = [
   ["receipts", "Receipts"],
-  ["sources", "Live, simulated, backtest"],
+  ["sources", "Live or simulated"],
   ["verify", "Checking on Solana"],
   ["rules", "Rules and versions"],
   ["english", "Plain English"],
-  ["backtest", "Backtest"],
   ["golive", "Going live"],
   ["fuel", "AI fuel"],
   ["pages", "Public pages"],
@@ -25,8 +24,8 @@ const TOC: [string, string][] = [
 
 const GO_LIVE: [string, string][] = [
   ["Connect the coin", "Paste the mint address and sign a message with the wallet that created it. Signing is free and moves no SOL."],
-  ["Route part of creator fees to AI fuel", "pump.fun pays creator fees on every trade. Choose the share that goes to Circuit for AI. Circuit never touches the rest."],
-  ["Review", "Read the plain-English rules and the backtest one more time."],
+  ["AI fuel", `Nothing to set. Your coin pays for its own AI: up to ${FUEL_SHARE * 100}% of the creator fees it earns after going live. The rest is never touched.`],
+  ["Review", "Read the plain-English rules one more time."],
   ["Publish", "The program's fingerprint is written to Solana and the transaction is shown."],
   ["Choose the page layout", "World, Gallery, Feed or Website. You can change it later."],
 ];
@@ -98,13 +97,12 @@ export function DocsBody() {
 
         <section id="sources" className="flex scroll-mt-24 flex-col gap-5">
           <Eyebrow n={2}>SOURCES</Eyebrow>
-          <h2 className={h2}>Live, simulated or backtest.</h2>
+          <h2 className={h2}>Live or simulated.</h2>
           <p className={body}>Every event, receipt and money figure is labelled with where it came from. A simulated run never looks like a real one.</p>
           <div className="flex flex-col border-t border-[#1f2125]">
             {[
               ["● LIVE · SOLANA", "text-ok", "Caused by a real transaction. Links to Solscan. Receipts are written to Solana."],
               ["● SIMULATED", "text-signal", "Sent from the simulator in the builder. No transaction, no Solscan link, nothing written on chain. All purchases a program makes are simulated at launch."],
-              ["● BACKTEST", "text-var", "What would have happened if the program had seen a coin's past trades. The trades are real; the results are not."],
             ].map(([tag, tone, text]) => (
               <div key={tag} className="flex flex-wrap items-baseline gap-4 border-b border-[#1f2125] py-3.5">
                 <span className={`w-[130px] font-mono text-[11px] tracking-[0.1em] ${tone}`}>{tag}</span>
@@ -188,21 +186,8 @@ export function DocsBody() {
           </Link>
         </section>
 
-        <section id="backtest" className="flex scroll-mt-24 flex-col gap-5">
-          <Eyebrow n={6}>BACKTEST</Eyebrow>
-          <h2 className={h2}>Try it on yesterday&apos;s trades.</h2>
-          <p className={body}>
-            Before going live, replay the last 24 hours or 7 days of any pump.fun coin through your program. You get a summary, a timeline of where it would have fired,
-            the would-be receipts marked BACKTEST, and an estimate of AI cost against creator fees. If nothing would have happened, Circuit tells you which rule never
-            matched.
-          </p>
-          <div className="overflow-hidden rounded-[14px] border border-[#23252a]">
-            <BacktestExample onOpenReceipt={() => setModal({ type: "receipt", kind: "backtest" })} />
-          </div>
-        </section>
-
         <section id="golive" className="flex scroll-mt-24 flex-col gap-5">
-          <Eyebrow n={7}>GOING LIVE</Eyebrow>
+          <Eyebrow n={6}>GOING LIVE</Eyebrow>
           <h2 className={h2}>From simulator to a real coin.</h2>
           <div className="flex flex-col border-t border-[#1f2125]">
             {GO_LIVE.map(([t, d], i) => (
@@ -222,12 +207,13 @@ export function DocsBody() {
         </section>
 
         <section id="fuel" className="flex scroll-mt-24 flex-col gap-5">
-          <Eyebrow n={8}>AI FUEL</Eyebrow>
+          <Eyebrow n={7}>AI FUEL</Eyebrow>
           <h2 className={h2}>The coin pays for its own AI.</h2>
           <p className={body}>
-            AI blocks (names, personalities, posts, decisions) cost a little each time they run. The share of creator fees you route to Circuit fills the coin&apos;s fuel;
-            the meter shows what comes in, the burn rate and the days left. At zero, AI blocks pause or use simple fallbacks such as default names. Nothing else stops.
-            Creators can top up from their wallet at any time.
+            AI blocks (names, personalities, posts, decisions) cost a fraction of a cent each time they run. There is no budget to pick: every trade of the coin earns
+            creator fees, and up to {FUEL_SHARE * 100}% of the fees earned since going live can be spent on AI. The rest is never touched. A coin with a few thousand
+            dollars of trading a day earns far more fuel than its AI uses. If it ever runs out, AI blocks use simple fallbacks such as default names until the next
+            trades refill it. Nothing else stops.
           </p>
           <div className="flex gap-0.5 self-start rounded-lg border border-[#23252a] bg-canvas p-[3px]">
             {(["healthy", "low", "empty"] as const).map((k) => (
@@ -247,7 +233,7 @@ export function DocsBody() {
         </section>
 
         <section id="pages" className="flex scroll-mt-24 flex-col gap-5">
-          <Eyebrow n={9}>PUBLIC PAGES</Eyebrow>
+          <Eyebrow n={8}>PUBLIC PAGES</Eyebrow>
           <h2 className={h2}>One page per coin.</h2>
           <p className={body}>
             Every live coin gets circuit.app/p/your-coin. The identity, rules, proof and activity always sit in the same place. The creator picks how the world is shown:

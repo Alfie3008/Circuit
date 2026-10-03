@@ -4,27 +4,29 @@ import { useEffect, useMemo, useState } from "react";
 import { useFingerprint } from "@/components/runtime/fingerprint";
 import { Words } from "@/components/runtime/Words";
 import { api, findWallet, shortWallet } from "@/lib/account/wallet";
-import { backtest, simulatedHistory, type BacktestResult } from "@/lib/backtest/backtest";
-import { fetchHistory } from "@/lib/chain/client";
 import { isAddress, solscanAccount } from "@/lib/chain/parse";
 import { explainProgram } from "@/lib/explain/explain";
+import { AI_COST_PER_CALL_USD, DEFAULT_CREATOR_FEE_RATE, FUEL_SHARE } from "@/lib/fuel";
 import { countBlocks } from "@/lib/marketing/demos";
 import type { ProjectSetup } from "@/lib/project/storage";
 import { useAccount } from "@/store/account";
 import { useProjectStore } from "@/store/project";
-import { useRuntimeStore } from "@/store/runtime";
 
 const OK = "oklch(0.80 0.13 155)";
 const SIG = "oklch(0.84 0.15 80)";
-const STEPS = ["Connect the coin", "AI budget", "Review", "Publish", "Page layout"];
-const TITLES = ["Connect your coin", "Set the AI budget", "Review the rules and the backtest", "Publish your rules", "Choose your public page"];
+const STEPS = ["Connect the coin", "AI fuel", "Review", "Publish", "Page layout"];
+const TITLES = ["Connect your coin", "Your coin pays for its AI", "Review the rules", "Publish your rules", "Choose your public page"];
 const LAYOUTS: { id: ProjectSetup["pageLayout"]; name: string; desc: string; cols: string; cells: string[] }[] = [
   { id: "world", name: "World", desc: "Agents and entities as cards", cols: "1fr 1fr 1fr", cells: ["100%", "100%", "100%", "100%", "100%", "100%"] },
   { id: "gallery", name: "Gallery", desc: "Characters as collectible tiles", cols: "1fr 1fr 1fr 1fr", cells: ["100%", "100%", "100%", "100%"] },
   { id: "feed", name: "Feed", desc: "Posts your program makes", cols: "1fr", cells: ["12px", "12px", "12px"] },
   { id: "website", name: "Website", desc: "A mini homepage from your values", cols: "1fr 1fr", cells: ["24px", "24px", "14px", "14px"] },
 ];
-const BUDGETS = [0.5, 1, 5];
+/** A worked example for the AI fuel step: fees on $10k of trading. */
+const EXAMPLE_VOLUME_USD = 10_000;
+const EXAMPLE_FEES_USD = EXAMPLE_VOLUME_USD * DEFAULT_CREATOR_FEE_RATE;
+const EXAMPLE_CALLS = Math.round((EXAMPLE_FEES_USD * FUEL_SHARE) / AI_COST_PER_CALL_USD);
+const pct = (n: number) => `${Math.round(n * 1000) / 10}%`;
 const field =
   "h-[42px] w-full rounded-lg border border-[#2a2c31] bg-canvas px-3 font-mono text-[12.5px] text-fg placeholder:text-faint focus:border-signal/60 focus:outline-none";
 
@@ -35,19 +37,16 @@ const slugify = (text: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
 
-/** Go live: connect, budget, review, publish, page layout. Every step uses the real thing. */
+/** Go live: connect, AI fuel, review, publish, page layout. Every step uses the real thing. */
 export function GoLiveDialog({ onClose }: { onClose: () => void }) {
   const { wallet, busy: signing, error: signError, signIn, refresh } = useAccount();
   const current = useProjectStore((s) => s.current);
   const program = useProjectStore((s) => s.program);
   const setup = useProjectStore((s) => s.setup);
   const updateSetup = useProjectStore((s) => s.updateSetup);
-  const chain = useRuntimeStore((s) => s.chainStatus);
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState<"coin" | "none">(setup.launchMode === "existing" || !!setup.tokenAddress ? "coin" : "none");
-  const [budget, setBudget] = useState(1);
   const [ack, setAck] = useState(false);
-  const [bt, setBt] = useState<{ result: BacktestResult; source: string } | { error: string } | null>(null);
   const [slug, setSlug] = useState(() => slugify(setup.tokenSymbol || current?.name || "my-coin"));
   const [pub, setPub] = useState<"idle" | "pending" | "done">("idle");
   const [pubError, setPubError] = useState<string | null>(null);
@@ -67,33 +66,6 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // The backtest runs when the review step opens.
-  useEffect(() => {
-    if (step !== 2 || bt || !program) return;
-    let alive = true;
-    void (async () => {
-      try {
-        let events;
-        let source = "a simulated trading day (no coin connected)";
-        if (mode === "coin" && isAddress(mint) && chain?.enabled) {
-          const h = await fetchHistory(mint, 24, 300);
-          events = h.events;
-          source = `the last 24 hours of real trades${h.truncated ? ` (most recent ${h.scanned})` : ""}`;
-        } else {
-          events = simulatedHistory(24, 42);
-          if (mode === "coin") source = "a simulated trading day (no Solana connection on this server)";
-        }
-        const result = await backtest(program, events);
-        if (alive) setBt({ result, source });
-      } catch (e) {
-        if (alive) setBt({ error: e instanceof Error ? e.message : String(e) });
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [step, bt, program, mode, mint, chain]);
-
   const coinOk = mode === "none" || isAddress(mint);
   const ok = [!!wallet && coinOk, true, ack, pub === "done", true];
   const reach = (i: number) => i <= step || ok.slice(0, i).every(Boolean);
@@ -105,7 +77,7 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
     try {
       const body = { id: current.id, name: current.name, slug, program, setup: { ...setup, pageLayout: layout }, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
       await api("/api/projects", { method: "POST", body });
-      await api(`/api/projects/${current.id}`, { method: "PATCH", body: { live: true, aiDailyUsd: budget } });
+      await api(`/api/projects/${current.id}`, { method: "PATCH", body: { live: true } });
       setPublishedSlug(slug);
       setPub("done");
     } catch (e) {
@@ -119,8 +91,6 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
     updateSetup({ pageLayout: l });
     if (current && pub === "done") void api(`/api/projects/${current.id}`, { method: "PATCH", body: { layout: l } }).catch(() => {});
   };
-
-  const r = bt && "result" in bt ? bt.result : null;
 
   return (
     <div onClick={onClose} className="fixed inset-0 z-[200] flex items-center justify-center bg-[rgba(5,6,7,.74)] p-6 backdrop-blur-[6px]">
@@ -249,32 +219,31 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
             {step === 1 && (
               <>
                 <div className="text-[14.5px] leading-normal text-fg-2 text-pretty">
-                  AI blocks (names, personalities, posts, decisions) cost a little each time they run. Set the most this project may spend on AI per day. Past it, AI
-                  blocks answer with simple fallbacks until tomorrow. Nothing else stops.
+                  AI blocks (names, personalities, posts, decisions) cost a fraction of a cent each time they run. You don&apos;t set a budget: your coin pays for its
+                  own AI out of the creator fees it earns.
                 </div>
-                <div className="flex gap-1.5">
-                  {BUDGETS.map((b) => (
-                    <button
-                      key={b}
-                      onClick={() => setBudget(b)}
-                      className="h-[34px] cursor-pointer rounded-[7px] border px-3.5 font-mono text-[12px] text-fg"
-                      style={{ borderColor: b === budget ? "oklch(0.84 0.15 80 / .6)" : "#2c2f35", background: b === budget ? "oklch(0.84 0.15 80 / .08)" : "transparent" }}
-                    >
-                      ${b} / day
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 overflow-hidden rounded-[10px] border border-[#23252a] font-mono">
+                <div className="grid grid-cols-3 overflow-hidden rounded-[10px] border border-[#23252a] font-mono">
                   <div className="border-r border-[#23252a] p-3">
-                    <div className="text-[10px] tracking-[0.12em] text-dim">DAILY CAP</div>
-                    <div className="mt-1 text-[17px]">${budget.toFixed(2)}</div>
+                    <div className="text-[10px] tracking-[0.12em] text-dim">AI MAY SPEND</div>
+                    <div className="mt-1 text-[17px]">up to {pct(FUEL_SHARE)}</div>
+                    <div className="mt-0.5 text-[11px] text-dim">of fees earned after going live</div>
+                  </div>
+                  <div className="border-r border-[#23252a] p-3">
+                    <div className="text-[10px] tracking-[0.12em] text-dim">EXAMPLE</div>
+                    <div className="mt-1 text-[17px]">${EXAMPLE_VOLUME_USD.toLocaleString()} traded</div>
+                    <div className="mt-0.5 text-[11px] text-dim">≈ ${EXAMPLE_FEES_USD.toFixed(0)} in creator fees</div>
                   </div>
                   <div className="p-3">
-                    <div className="text-[10px] tracking-[0.12em] text-dim">≈ AI CALLS / DAY</div>
-                    <div className="mt-1 text-[17px]">{Math.round(budget / 0.001).toLocaleString()}</div>
+                    <div className="text-[10px] tracking-[0.12em] text-dim">PAYS FOR</div>
+                    <div className="mt-1 text-[17px]">≈ {EXAMPLE_CALLS.toLocaleString()}</div>
+                    <div className="mt-0.5 text-[11px] text-dim">AI calls</div>
                   </div>
                 </div>
-                <div className="text-[13px] leading-normal text-dim">Paying for AI from a share of your creator fees (AI fuel) is coming. Until then this cap keeps costs predictable.</div>
+                <div className="text-[13.5px] leading-normal text-fg-2 text-pretty">
+                  {mode === "coin"
+                    ? "If the fuel ever runs out, AI blocks answer with simple fallbacks (default names, template posts) until the next trades refill it. Nothing else stops."
+                    : "With no coin connected there are no creator fees, so AI blocks answer with simple fallbacks (default names, template posts). Connect a coin to give it real AI."}
+                </div>
                 <div className="rounded-lg border border-signal/40 bg-signal/[0.06] px-3.5 py-3 text-[13.5px] leading-normal text-fg">
                   Creator-fee routing depends on the token&apos;s existing configuration and is not automatically changed by Circuit.
                 </div>
@@ -298,16 +267,6 @@ export function GoLiveDialog({ onClose }: { onClose: () => void }) {
                       ))}
                     </div>
                   ))}
-                </div>
-                <div className="font-mono text-[10.5px] tracking-[0.12em] text-dim">BACKTEST · LAST 24 HOURS</div>
-                <div className="rounded-[10px] border border-var/35 bg-var/[0.05] px-4 py-3.5 text-[15px] leading-normal">
-                  {!bt && "Replaying…"}
-                  {bt && "error" in bt && <span className="text-err">Backtest failed: {bt.error}</span>}
-                  {r &&
-                    (r.executions === 0
-                      ? `Nothing would have happened. ${r.note ?? ""}`
-                      : `Would have run ${r.executions} time${r.executions === 1 ? "" : "s"}, created ${r.agentsCreated} agent${r.agentsCreated === 1 ? "" : "s"}, made ${r.aiCalls} AI call${r.aiCalls === 1 ? "" : "s"} ≈ $${r.estAiCostUsd.toFixed(2)}, while earning ≈ ${r.estCreatorFeesSol.toFixed(2)} SOL in creator fees.`)}
-                  {bt && "source" in bt && <div className="mt-1 font-mono text-[11px] text-dim">Based on {bt.source}.</div>}
                 </div>
                 <button onClick={() => setAck((a) => !a)} className="flex cursor-pointer items-center gap-2.5 text-left text-[14px] text-fg-2">
                   <span

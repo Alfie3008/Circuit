@@ -5,7 +5,7 @@ import { begin, finish, trigger } from "@/lib/runtime/engine";
 import { Rng } from "@/lib/runtime/rng";
 import { initialState } from "@/lib/runtime/state";
 import { parseTransaction, PUMP_PROGRAM, solscanTx, WSOL_MINT, type RpcTransaction, type TokenBalance } from "./parse";
-import { history, holderCount, pollEvents, type Fetcher } from "./rpc";
+import { holderCount, pollEvents, type Fetcher } from "./rpc";
 
 // Realistic base58 addresses (shape only).
 const MINT = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
@@ -119,7 +119,7 @@ function fakeRpc(handlers: Record<string, (params: unknown) => unknown>) {
   return { f, calls };
 }
 
-describe("polling and history", () => {
+describe("polling and holders", () => {
   beforeEach(() => vi.stubEnv("CIRCUIT_SOLANA_RPC_URL", "https://rpc.example"));
   afterEach(() => vi.unstubAllEnvs());
 
@@ -148,23 +148,6 @@ describe("polling and history", () => {
     const { f, calls } = fakeRpc({});
     await expect(pollEvents({ mint: "not-a-mint" }, f)).rejects.toMatchObject({ status: 400 });
     expect(calls).toHaveLength(0);
-  });
-
-  it("history pages back until the time window ends", async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const sigs = [
-      { signature: "s3", slot: 3, err: null, blockTime: now - 60 },
-      { signature: "s2", slot: 2, err: { failed: true }, blockTime: now - 120 },
-      { signature: "s1", slot: 1, err: null, blockTime: now - 3 * 3600 },
-    ];
-    const { f } = fakeRpc({
-      getSignaturesForAddress: () => sigs,
-      getTransaction: (p) => ({ ...BUY, blockTime: now - 60, transaction: { ...BUY.transaction, signatures: [(p as [string])[0]] } }),
-      getTokenSupply: supply,
-    });
-    const out = await history({ mint: MINT, hours: 1, max: 100 }, f);
-    expect(out.scanned).toBe(2); // s1 is outside the hour
-    expect(out.events.map((e) => e.proof?.signature)).toEqual(["s3"]); // s2 failed
   });
 
   it("counts distinct holders with DAS paging (Helius only)", async () => {

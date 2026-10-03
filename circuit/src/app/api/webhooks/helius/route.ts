@@ -6,7 +6,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { pool } from "@/lib/chain/rpc";
 import type { CircuitEvent } from "@/lib/runtime/events";
-import { claimNew, liveByAddress, projectEvents, webhookTransactions } from "@/lib/server/chainFeed";
+import { intake, liveByAddress, projectEvents, webhookTransactions } from "@/lib/server/chainFeed";
 import { getDb } from "@/lib/server/db";
 import { involvedAddresses } from "@/lib/chain/parse";
 import { handle, readJson } from "@/lib/server/http";
@@ -32,6 +32,7 @@ export async function POST(req: Request) {
 
     // Group events per project, oldest first.
     const perProject = new Map<string, CircuitEvent[]>();
+    const byId = new Map([...live.values()].flat().map((p) => [p.id, p]));
     for (const tx of txs) {
       const projects = new Set([...involvedAddresses(tx)].flatMap((a) => live.get(a) ?? []));
       for (const p of projects) {
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
 
     const results = await pool([...perProject], 4, async ([id, events]) => {
       try {
-        return await runProject(db, id, await claimNew(db, id, events));
+        return await runProject(db, id, await intake(db, byId.get(id)!, events));
       } catch (e) {
         console.error("[circuit] webhook run failed", id, e);
         return { projectId: id, failed: true };
