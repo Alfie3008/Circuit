@@ -29,6 +29,14 @@ export interface ReceiptProps {
   tx?: string;
   onVerify?: () => void;
   onOpen?: () => void;
+  /** Real receipts: replace the sample header line, sub line and proof text. */
+  trigger?: { verb: string; amount?: string; by?: string };
+  sub?: React.ReactNode;
+  naText?: string;
+  /** Overrides the source chip (e.g. SCHEDULED, RAISED BY THE PROGRAM). */
+  sourceLabel?: string;
+  /** Status bar count text (e.g. "6 steps"). */
+  countText?: string;
 }
 
 const DEFAULT_STEPS: ReceiptStep[] = [
@@ -55,7 +63,7 @@ export function Receipt(p: ReceiptProps) {
   const size = p.size ?? "full";
   const source = p.source ?? "live";
   const status = p.status ?? "complete";
-  const proof = source === "live" ? (p.proof ?? "anchored") : "na";
+  const proof = source === "live" && !p.naText ? (p.proof ?? "anchored") : "na";
   const steps = p.steps ?? DEFAULT_STEPS;
   const n = steps.length;
   const card = size === "card";
@@ -94,6 +102,7 @@ export function Receipt(p: ReceiptProps) {
     running: ["RUNNING", `${prog} / ${n}`, SIG, "RUNNING"],
   }[status];
   const src = { live: ["LIVE · SOLANA", "LIVE", OK], sim: ["SIMULATED", "SIM", SIG], backtest: ["BACKTEST", "BACKTEST", VAL] }[source];
+  if (p.sourceLabel) src[0] = p.sourceLabel;
   const srcColor = src[2];
   const amount = p.amount ?? (source === "sim" ? "+10 SOL" : "10.4 SOL");
   const wallet = p.wallet ?? "7xQp…f3aK";
@@ -136,12 +145,21 @@ export function Receipt(p: ReceiptProps) {
             <span className="h-1.5 w-1.5 rounded-[3px]" style={{ background: srcColor, boxShadow: `0 0 8px ${srcColor}` }} />
             {src[0]}
           </span>
-          <span className="inline-flex flex-wrap items-center gap-1.5 font-sans text-[13.5px] text-fg">
-            {source === "sim" ? "Simulator ·" : source === "backtest" ? "Replay · Buy" : "Buy ·"} <span className={valuePill}>{amount}</span>
-            <span className="text-fg-2">{source === "sim" ? "volume signal" : `by ${wallet}`}</span>
-          </span>
+          {p.trigger ? (
+            <span className="inline-flex flex-wrap items-center gap-1.5 font-sans text-[13.5px] text-fg">
+              {p.trigger.verb}
+              {p.trigger.amount && <span className={valuePill}>{p.trigger.amount}</span>}
+              {p.trigger.by && <span className="text-fg-2">{p.trigger.by}</span>}
+            </span>
+          ) : (
+            <span className="inline-flex flex-wrap items-center gap-1.5 font-sans text-[13.5px] text-fg">
+              {source === "sim" ? "Simulator ·" : source === "backtest" ? "Replay · Buy" : "Buy ·"} <span className={valuePill}>{amount}</span>
+              <span className="text-fg-2">{source === "sim" ? "volume signal" : `by ${wallet}`}</span>
+            </span>
+          )}
         </div>
-        {!card && (
+        {!card && p.sub !== undefined && <div className="flex flex-wrap gap-2 text-[11px] text-dim">{p.sub}</div>}
+        {!card && p.sub === undefined && (
           <div className="flex flex-wrap gap-2 text-[11px] text-dim">
             <span>
               {source === "sim"
@@ -198,7 +216,7 @@ export function Receipt(p: ReceiptProps) {
           <span className={`h-1.5 w-1.5 rounded-[3px] ${status === "running" ? "animate-pulse" : ""}`} style={{ background: S[2] }} />
           {S[0]}
         </span>
-        <span className="tracking-[0.04em] text-fg-2">{S[1]}</span>
+        <span className="tracking-[0.04em] text-fg-2">{p.countText ?? S[1]}</span>
       </div>
       {status === "stopped" && !card && <div className="mx-3 mb-2.5 font-sans text-[12.5px] text-fg-2">Stopped by the creator at 14:02:13. Steps 4 to 6 did not run.</div>}
       <div className="flex flex-wrap items-center gap-2.5 border-t border-[#1f2125] bg-canvas px-4 py-2.5 text-[11px] text-dim">
@@ -234,7 +252,9 @@ export function Receipt(p: ReceiptProps) {
             <span className="inline-flex h-[26px] items-center rounded-md border border-dashed border-[#34363c] px-2.5 tracking-[0.06em] text-faint">Verify</span>
           </>
         )}
-        {proof === "na" && <span className="flex-1">{source === "sim" ? "Simulated run · not written to Solana" : "Backtest · would-be receipt, not written to Solana"}</span>}
+        {proof === "na" && (
+          <span className="flex-1">{p.naText ?? (source === "sim" ? "Simulated run · not written to Solana" : "Backtest · would-be receipt, not written to Solana")}</span>
+        )}
       </div>
     </div>
   );

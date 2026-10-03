@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, TrashIcon } from "@/components/ui/icons";
 import { FILE_EXTENSION } from "@/lib/project/file";
+import { useBuilderUi } from "@/store/builderUi";
 import { useProjectStore } from "@/store/project";
 
 const timeAgo = (t: number) => {
@@ -80,6 +81,7 @@ export function ProjectMenu() {
           <button role="menuitem" className={item} onClick={run(() => actions.openDialog("templates"))}>New project…</button>
           <button role="menuitem" className={item} onClick={run(actions.duplicateProject)}>Duplicate</button>
           <button role="menuitem" className={item} onClick={run(() => actions.openDialog("setup"))}>Project setup…</button>
+          <button role="menuitem" className={item} onClick={run(() => useBuilderUi.getState().setIr(!useBuilderUi.getState().irOpen))}>Show Circuit IR (program JSON)</button>
           <a role="menuitem" className={item} href="/modules">Modules</a>
           <div className="my-1 border-t border-line" />
           <p className="px-3 pb-1 pt-1.5 text-[10.5px] tracking-[0.12em] text-dim">OPEN</p>

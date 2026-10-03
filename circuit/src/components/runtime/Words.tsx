@@ -10,7 +10,7 @@ export function Words({ parts }: { parts: Part[] }) {
         ) : (
           <span
             key={i}
-            className={`mr-1 inline-block rounded-full border px-1.5 font-mono text-[12px] leading-[19px] ${
+            className={`mr-1 rounded-[4px] border px-1.5 py-px font-mono text-[0.8em] [box-decoration-break:clone] [-webkit-box-decoration-break:clone] ${
               p.kind === "var"
                 ? "border-[oklch(0.42_0.05_235)] bg-[oklch(0.29_0.035_235)] text-var"
                 : p.kind === "event"

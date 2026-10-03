@@ -209,7 +209,7 @@ export function ConsolePane() {
       role="tab"
       aria-selected={view === v}
       onClick={() => setView(v)}
-      className={`relative py-2 transition-colors ${view === v ? "text-fg" : "text-dim hover:text-fg-2"}`}
+      className={`relative py-2 transition-colors ${view === v ? "text-fg" : "text-muted hover:text-fg-2"}`}
     >
       {label}
       {view === v && <span className="absolute inset-x-0 -bottom-px h-px bg-signal" />}
@@ -217,15 +217,18 @@ export function ConsolePane() {
   );
 
   return (
-    <section className="flex h-[188px] shrink-0 flex-col border-t border-line bg-panel font-mono" aria-label="Console and debugger">
-      <header className="flex items-center justify-between border-b border-line px-4 text-[11px] tracking-[0.12em]">
-        <nav className="flex gap-5" role="tablist">
+    <section className="flex h-[176px] shrink-0 flex-col border-t border-[#1d1f23] bg-[#0c0d0e] font-mono" aria-label="Console and debugger">
+      <header className="flex h-8 shrink-0 items-center justify-between border-b border-[#18191c] px-3.5 text-[10.5px] tracking-[0.12em] text-muted">
+        <nav className="flex items-center gap-3.5" role="tablist">
           {tab("console", "CONSOLE")}
           {tab("debugger", "DEBUGGER")}
+          <span className="text-dim">
+            {state.executionCount} {state.executionCount === 1 ? "RUN" : "RUNS"}
+          </span>
         </nav>
         <Controls />
       </header>
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-2.5 text-[12px] leading-relaxed">
+      <div className="min-h-0 flex-1 overflow-auto px-3.5 py-2 text-[12px] leading-[1.75]">
         {view === "console" ? <ConsoleLog state={state} /> : <Debugger state={state} />}
       </div>
     </section>

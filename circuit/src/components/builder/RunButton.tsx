@@ -47,7 +47,7 @@ export function RunButton() {
       <button
         onClick={runDefault}
         title="Simulate the selected script's event (or the first script's)"
-        className="inline-flex h-[30px] items-center gap-2 whitespace-nowrap rounded-l-md bg-signal pl-3.5 pr-3 font-mono text-xs font-medium tracking-[0.04em] text-signal-ink transition-[filter] hover:brightness-110"
+        className="inline-flex h-8 items-center gap-2 whitespace-nowrap rounded-l-[7px] bg-signal pl-3.5 pr-3 font-mono text-xs font-semibold tracking-[0.04em] text-signal-ink transition-[filter] hover:brightness-110"
       >
         {busy ? (
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal-ink" aria-hidden />
@@ -61,7 +61,7 @@ export function RunButton() {
         aria-label="Choose an event to simulate"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex h-[30px] items-center rounded-r-md border-l border-signal-ink/20 bg-signal px-1.5 text-signal-ink hover:brightness-110"
+        className="inline-flex h-8 items-center rounded-r-[7px] border-l border-signal-ink/20 bg-signal px-1.5 text-signal-ink hover:brightness-110"
       >
         <ChevronDownIcon width={13} height={13} />
       </button>

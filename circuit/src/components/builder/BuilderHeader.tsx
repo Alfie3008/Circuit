@@ -2,92 +2,91 @@
 
 import Link from "next/link";
 import { LogoMark } from "@/components/site/Logo";
-import { ChevronDownIcon, CodeIcon } from "@/components/ui/icons";
 import { useProjectStore } from "@/store/project";
 import { useRuntimeStore } from "@/store/runtime";
-import { AiBar } from "./AiBar";
-import { SaveIndicator, UndoRedo } from "./EditorControls";
+import { AiButton } from "./AiBar";
 import { ProjectMenu } from "./ProjectMenu";
 import { RunButton } from "./RunButton";
 
-/** Three-node circuit mark from the design: two outlined nodes and a lit amber one. */
-const MODE_LABEL = { prototype: "PROTOTYPE", existing: "EXISTING TOKEN", launch: "LAUNCH PREVIEW" } as const;
+const btn =
+  "h-8 cursor-pointer whitespace-nowrap rounded-[7px] border border-line-2 bg-transparent px-3 font-mono text-[12px] tracking-[0.04em] text-[#c9c7c2] transition-colors hover:bg-white/[0.03] hover:text-fg";
+const divider = <span className="mx-1 h-5 w-px shrink-0 bg-[#26282d]" />;
 
-const ghostBtn =
-  "inline-flex h-[30px] items-center gap-2 whitespace-nowrap rounded-md border border-line-2 bg-panel px-3 font-mono text-xs tracking-[0.04em] text-fg-2 transition-colors hover:bg-raised hover:text-fg disabled:cursor-not-allowed disabled:opacity-40";
+/** Whether AI blocks call a real model or answer with mock text. (The design's fuel meter takes this place once AI fuel exists.) */
+function AiStatus() {
+  const ai = useRuntimeStore((s) => s.aiStatus);
+  const live = !!ai?.enabled;
+  return (
+    <span
+      title={live ? `AI blocks use ${ai!.runtimeModel}; Build with AI uses ${ai!.compileModel}.` : "No Anthropic key on the server: AI blocks answer with mock text."}
+      className="hidden h-8 items-center gap-2 whitespace-nowrap rounded-[7px] border border-line-2 px-2.5 font-mono text-[11.5px] text-[#c9c7c2] min-[1100px]:flex"
+    >
+      <span className="text-[10px] tracking-[0.1em] text-muted">AI</span>
+      <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-ok" : "bg-[#55585e]"}`} />
+      <span className={live ? "text-ok" : "text-dim"}>{live ? "LIVE" : "MOCK"}</span>
+    </span>
+  );
+}
 
-export function BuilderHeader({ panel, onToggle }: { panel: "ir" | "explain" | null; onToggle: (p: "ir" | "explain") => void }) {
-  const irOpen = panel === "ir";
-  const blocks = useProjectStore((s) => s.stats.blocks);
-  const valid = useProjectStore((s) => s.program !== null);
+function SaveButton() {
+  const status = useProjectStore((s) => s.saveStatus);
   const flush = useProjectStore((s) => s.flush);
-  const launchMode = useProjectStore((s) => s.setup.launchMode);
+  return (
+    <button
+      className={`${btn} ${status === "error" ? "border-err/60 text-err" : ""}`}
+      onClick={flush}
+      title={status === "error" ? "Browser storage is full or blocked. Export your project to keep it." : "Projects autosave. Save writes immediately."}
+    >
+      {status === "error" ? "Not saved" : status === "saving" ? "Saving…" : "Save"}
+    </button>
+  );
+}
+
+export function BuilderHeader() {
+  const blocks = useProjectStore((s) => s.stats.blocks);
   const openDialog = useProjectStore((s) => s.openDialog);
   const debug = useRuntimeStore((s) => s.debug);
   const setDebug = useRuntimeStore((s) => s.setDebug);
 
   return (
-    <header className="relative z-30 flex h-[52px] shrink-0 items-center gap-4 border-b border-[#1d1f23] bg-ink px-4">
-      <div className="flex min-w-[150px] flex-1 basis-0 items-center gap-3 overflow-hidden">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="CIRCUIT home">
-          <LogoMark />
-          <span className="hidden font-mono text-[13px] font-semibold tracking-[0.18em] min-[1440px]:inline">CIRCUIT</span>
-        </Link>
-        <span className="h-4 w-px shrink-0 bg-line-2" />
+    <header className="relative z-30 flex h-[52px] shrink-0 items-center gap-3.5 border-b border-[#1d1f23] bg-[#0f1012] px-3.5">
+      <Link href="/" className="flex shrink-0 items-center" aria-label="CIRCUIT home">
+        <LogoMark />
+      </Link>
+      <span className="h-5 w-px shrink-0 bg-[#26282d]" />
+      <div className="flex min-w-0 shrink items-center gap-2">
         <ProjectMenu />
-        <span className="hidden shrink-0 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-muted tabular-nums min-[1700px]:inline">
+        <span className="hidden shrink-0 rounded-[4px] border border-line-2 px-1.5 py-px font-mono text-[10.5px] tabular-nums text-muted min-[1240px]:inline">
           {blocks} {blocks === 1 ? "BLOCK" : "BLOCKS"}
         </span>
-        <button
-          onClick={() => openDialog("setup")}
-          title="Project setup: how this project relates to a token"
-          className="hidden shrink-0 items-center gap-1 rounded-full border border-line-2 bg-panel px-2 py-0.5 font-mono text-[10.5px] tracking-[0.08em] text-fg-2 transition-colors hover:border-signal/50 hover:text-fg min-[1540px]:inline-flex"
-        >
-          <span className="text-dim">TOKEN:</span>
-          {MODE_LABEL[launchMode]}
-          <ChevronDownIcon width={11} height={11} className="text-dim" />
-        </button>
       </div>
-
-      <div className="w-[min(520px,30vw)] min-w-[200px] shrink">
-        <AiBar />
+      <div className="flex min-w-[120px] flex-1 justify-center overflow-hidden">
+        <AiButton />
       </div>
-
-      <div className="flex flex-1 basis-0 items-center justify-end gap-2">
-        <UndoRedo />
-        <SaveIndicator />
-        <button
-          onClick={() => onToggle("explain")}
-          aria-pressed={panel === "explain"}
-          title="Read the program as plain English"
-          className={`${ghostBtn} ${panel === "explain" ? "border-signal/55 text-fg" : ""}`}
-        >
-          Explain
+      <div className="flex shrink-0 items-center gap-1.5">
+        <AiStatus />
+        {divider}
+        <button className={btn} onClick={() => openDialog("backtest")} title="If this program had been running…">
+          Backtest
         </button>
         <button
-          onClick={() => onToggle("ir")}
-          aria-pressed={irOpen}
-          title="Show the program as Circuit IR"
-          className={`${ghostBtn} px-2 ${irOpen ? "border-signal/55 text-fg" : ""}`}
-        >
-          <CodeIcon width={13} height={13} />
-          <span className={`h-1.5 w-1.5 rounded-full ${valid ? "bg-ok" : "bg-err"}`} aria-label={valid ? "IR valid" : "IR invalid"} />
-        </button>
-        <button
-          className={`${ghostBtn} ${debug ? "border-signal/55 bg-signal/10 text-[oklch(0.88_0.13_80)] hover:bg-signal/15" : ""}`}
+          className={`${btn} hidden min-[1240px]:block ${debug ? "border-signal/55 bg-signal/10 text-[oklch(0.88_0.13_80)] hover:bg-signal/15" : ""}`}
           onClick={() => setDebug(!debug)}
           aria-pressed={debug}
           title="Debug mode: runs pause at every block so you can step through them"
         >
           Debug
         </button>
-        <button className={ghostBtn} onClick={flush} title="Projects autosave. Save writes immediately.">
-          Save
-        </button>
-        <button className={ghostBtn} onClick={() => openDialog("publish")} title="Give this project a public page, and run it on the server">
-          Publish
-        </button>
+        <SaveButton />
         <RunButton />
+        <button
+          onClick={() => openDialog("publish")}
+          title="Give this project a public page, and run it on the server"
+          className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-[7px] border border-ok/55 bg-ok/10 px-3.5 font-mono text-[12px] font-semibold tracking-[0.04em] text-[oklch(0.88_0.11_155)] transition-colors hover:bg-ok/20"
+        >
+          <span className="h-1.5 w-1.5 rounded-[3px] bg-ok" />
+          Go live
+        </button>
       </div>
     </header>
   );
