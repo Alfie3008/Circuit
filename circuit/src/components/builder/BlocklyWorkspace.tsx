@@ -7,6 +7,7 @@ import { attachWorkspaceCallbacks, registerCircuitBlocks } from "@/lib/blocks/re
 import { CIRCUIT_RENDERER, registerCircuitRenderer } from "@/lib/blocks/renderer";
 import { createCircuitTheme, loadBlockFont } from "@/lib/blocks/theme";
 import { buildToolbox } from "@/lib/blocks/toolbox";
+import type { Program } from "@/lib/ir";
 import { DIARY } from "@/lib/marketing/demos";
 import { getTemplate } from "@/lib/templates";
 import { markBlock, useProjectStore } from "@/store/project";
@@ -18,7 +19,18 @@ import { useRuntimeStore } from "@/store/runtime";
  * create another copy.
  */
 function openFromUrl() {
-  const id = new URLSearchParams(location.search).get("template");
+  const params = new URLSearchParams(location.search);
+  const remix = params.get("remix");
+  if (remix) {
+    // Open a published project's rules as your own copy.
+    void fetch(`/api/p/${encodeURIComponent(remix)}?receipts=1`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((p: { name: string; program: Program }) => useProjectStore.getState().openProgram(`${p.name} (remix)`, p.program))
+      .catch(() => useProjectStore.getState().notify("error", "Couldn't open that project's blocks."));
+    history.replaceState(null, "", location.pathname);
+    return;
+  }
+  const id = params.get("template");
   if (!id) return;
   const store = useProjectStore.getState();
   if (id === "blank") store.newFromTemplate(null);

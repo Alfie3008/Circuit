@@ -17,6 +17,7 @@ export interface PublicProject {
   timezone: string;
   token: string | null;
   wallet: string | null;
+  symbol: string;
   createdAt: number;
   updatedAt: number;
   program: Program;
@@ -26,6 +27,7 @@ export interface PublicProject {
     feed: FeedItem[];
     market: RuntimeState["market"];
     treasury: RuntimeState["treasury"];
+    website: RuntimeState["website"];
     executions: number;
   };
   status: { liveSince: number | null; lastEventAt: number | null; lastError: string | null; dropped: number };
@@ -47,6 +49,7 @@ export async function publicProject(db: Db, slug: string, receiptLimit = 20): Pr
     timezone: p.timezone,
     token: existing && p.setup.tokenAddress ? p.setup.tokenAddress : null,
     wallet: existing && p.setup.walletAddress ? p.setup.walletAddress : null,
+    symbol: p.setup.tokenSymbol ?? "",
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     program: p.program,
@@ -57,6 +60,7 @@ export async function publicProject(db: Db, slug: string, receiptLimit = 20): Pr
       feed: state.feed.slice(-50),
       market: state.market,
       treasury: state.treasury,
+      website: state.website,
       executions: state.executionCount,
     },
     status: {
