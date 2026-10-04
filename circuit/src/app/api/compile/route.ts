@@ -8,7 +8,8 @@
 import { compileWithModel, MAX_PROMPT_CHARS } from "@/lib/ai/compile";
 import { matchExample } from "@/lib/ai/examples";
 import { guard } from "@/lib/ai/guard";
-import { AiError, anthropicCaller, compileModel } from "@/lib/ai/model";
+import { BUCKETS, meteredCaller } from "@/lib/ai/meter";
+import { AiError, compileModel } from "@/lib/ai/model";
 
 export async function POST(req: Request) {
   let prompt: unknown;
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
   if (typeof prompt !== "string" || !prompt.trim()) return Response.json({ error: "Describe what you want the program to do." }, { status: 400 });
   if (prompt.length > MAX_PROMPT_CHARS) return Response.json({ error: `Keep the description under ${MAX_PROMPT_CHARS} characters.` }, { status: 400 });
 
-  const call = anthropicCaller();
+  const call = meteredCaller(BUCKETS.compile);
   if (!call) {
     const example = matchExample(prompt);
     if (example) return Response.json({ program: example.program, explanation: example.explanation, source: "offline" });

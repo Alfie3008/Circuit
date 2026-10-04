@@ -4,6 +4,7 @@
  * the app runs (on offline fallbacks) when no API key is configured.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { costOf } from "./spend";
 
 /** Natural language → Circuit IR. */
 export const compileModel = () => process.env.CIRCUIT_COMPILE_MODEL?.trim() || "claude-sonnet-5-5";
@@ -50,8 +51,12 @@ function toAiError(e: unknown): AiError {
   return new AiError(e instanceof Error ? e.message : "Unknown AI error", 500);
 }
 
-/** A caller backed by the Anthropic API, or null when no key is configured. */
-export function anthropicCaller(): ModelCaller | null {
+/**
+ * A caller backed by the Anthropic API, or null when no key is configured.
+ * `onCost` gets each call's real cost (USD, from the reported token usage),
+ * including calls that end in a refusal or are cut off, which are billed too.
+ */
+export function anthropicCaller(opts: { onCost?: (usd: number, model: string) => void | Promise<void> } = {}): ModelCaller | null {
   if (!aiConfigured()) return null;
   const client = new Anthropic(); // reads ANTHROPIC_API_KEY; retries 429/5xx twice
   return async (req) => {
@@ -64,6 +69,8 @@ export function anthropicCaller(): ModelCaller | null {
         // On a policy decline, re-run on a fallback model inside the same call.
         ...(FALLBACK_MODELS.test(req.model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       });
+      // Priced at the model that answered (a fallback may have served it).
+      await opts.onCost?.(costOf(response.model ?? req.model, response.usage), response.model ?? req.model);
       if (response.stop_reason === "refusal") throw new AiError("The model declined this request.", 422);
       if (response.stop_reason === "max_tokens") throw new AiError("The model's answer was cut off. Try a shorter request.", 502);
       return response.content

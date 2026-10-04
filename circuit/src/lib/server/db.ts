@@ -17,7 +17,9 @@ const g = globalThis as { __circuitDb?: Db; __circuitDbCode?: number };
 const DB_CODE = 2;
 
 export function getDb(): Db {
-  if (g.__circuitDb && g.__circuitDbCode === DB_CODE) return g.__circuitDb;
+  // Rebuilt if the code changed, or DATABASE_URL was added or removed since (dev hot reloads).
+  const wantPg = !!process.env.DATABASE_URL;
+  if (g.__circuitDb && g.__circuitDbCode === DB_CODE && (g.__circuitDb.kind === "postgres") === wantPg) return g.__circuitDb;
   void g.__circuitDb?.close?.().catch(() => {});
   g.__circuitDbCode = DB_CODE;
   const url = process.env.DATABASE_URL;

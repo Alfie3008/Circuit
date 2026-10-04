@@ -5,12 +5,16 @@
  * The client falls back to mock answers whenever this is unavailable.
  */
 import { guard, passwordRequired } from "@/lib/ai/guard";
-import { AiError, aiConfigured, anthropicCaller, compileModel, runtimeModel } from "@/lib/ai/model";
+import { BUCKETS, meteredCaller, spendToday } from "@/lib/ai/meter";
+import { AiError, aiConfigured, compileModel, runtimeModel } from "@/lib/ai/model";
 import { runOp, RuntimeOpSchema } from "@/lib/ai/runtime";
 
 export async function GET() {
+  const spend = await spendToday().catch(() => null);
   return Response.json({
     enabled: aiConfigured(),
+    spentTodayUsd: spend?.usd ?? null,
+    dailyCapUsd: spend?.capUsd ?? null,
     compileModel: compileModel(),
     runtimeModel: runtimeModel(),
     passwordRequired: passwordRequired(),
@@ -18,7 +22,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const call = anthropicCaller();
+  const call = meteredCaller(BUCKETS.builder);
   if (!call) return Response.json({ error: "AI is not configured on this server." }, { status: 503 });
 
   let body: unknown;

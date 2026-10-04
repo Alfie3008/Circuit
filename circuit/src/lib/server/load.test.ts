@@ -49,7 +49,7 @@ const slowAi = async () => {
       await db.listProjects({ limit: 1 });
       const postgres = (await import("postgres")).default;
       const sql = postgres(url, { onnotice: () => {} });
-      await sql`truncate circuit.projects, circuit.project_state, circuit.receipts, circuit.seen, circuit.ai_usage cascade`;
+      await sql`truncate circuit.projects, circuit.project_state, circuit.receipts, circuit.seen, circuit.ai_usage, circuit.batches cascade`;
       await sql.end();
     }
 

@@ -15,6 +15,7 @@
  *   (CIRCUIT_AI_DAILY_USD); past either, AI blocks get fallback answers and the
  *   receipt says so
  */
+import { aiDailyCapUsd } from "@/lib/ai/spend";
 import { AI_COST_PER_CALL_USD, fuelOf } from "@/lib/fuel";
 import { rulesFingerprint } from "@/lib/proof/proof";
 import { chainProvider, getSolBalance } from "@/lib/chain/rpc";
@@ -36,7 +37,7 @@ const envNum = (name: string, fallback: number) => {
 export const runLimits = () => ({
   runsPerMinute: envNum("CIRCUIT_RUNS_PER_MINUTE", 60),
   timeMs: envNum("CIRCUIT_RUN_TIME_MS", 20_000),
-  serverAiDailyUsd: envNum("CIRCUIT_AI_DAILY_USD", 5),
+  serverAiDailyUsd: aiDailyCapUsd(),
 });
 
 /** Executions one event (with what it raises) may cause, as in the browser. */
@@ -99,15 +100,18 @@ const solanaChain = (): ChainAdapter => ({
   balance: (wallet) => getSolBalance(wallet).catch(() => null),
 });
 
-/** Real AI while the budgets allow, mock answers after. Counts real calls. */
-function budgetedAi(base: Adapters["ai"], rng: Rng, call: ModelCaller | null, allowance: () => string | null, onCall: () => void) {
+/** Real AI while the budgets allow, mock answers after. Reports each finished op. */
+function budgetedAi(base: Adapters["ai"], rng: Rng, call: ModelCaller | null, allowance: () => string | null, onOp: () => void) {
   if (!call) return { ai: base, real: false };
   const model = runtimeModel();
   const ai = opAi(mockAi(rng), model, async (op) => {
     const reason = allowance();
     if (reason) throw new Error(reason);
-    onCall();
-    return runOp(op, call, model);
+    try {
+      return await runOp(op, call, model);
+    } finally {
+      onOp(); // billed even if the answer was unusable
+    }
   });
   return { ai, real: true };
 }
@@ -142,16 +146,20 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
       // AI fuel and the server's ceiling, read once per run.
       const day = today(started);
       let realCalls = 0;
+      let spentRun = 0;
+      /** Real cost reported for the op in progress (the model may be called more than once per op). */
+      let opCost = 0;
       let fuelLeft = 0;
       let serverUsed = 0;
-      const caller = opts.caller ?? (aiConfigured() ? anthropicCaller() : null);
+      const caller = opts.caller ?? (aiConfigured() ? anthropicCaller({ onCost: (usd) => void (opCost += usd) }) : null);
       if (caller) {
         const [totals, s] = await Promise.all([db.fuelTotals(projectId), db.aiUsage(null, day)]);
         fuelLeft = fuelOf(totals).leftUsd;
         serverUsed = s.usd;
       }
+      // The next call is assumed to cost the typical amount; what's already spent is the real cost.
       const allowance = () => {
-        const spent = (realCalls + 1) * AI_COST_PER_CALL_USD;
+        const spent = spentRun + AI_COST_PER_CALL_USD;
         if (spent > fuelLeft + 1e-9) return fuelLeft > 0 || project.setup.launchMode === "existing" ? "AI fuel is empty until the coin earns more creator fees" : "no coin connected, so no creator fees to pay for AI";
         if (serverUsed + spent > limits.serverAiDailyUsd + 1e-9) return "Circuit's daily AI limit is reached; back tomorrow";
         return null;
@@ -160,7 +168,11 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
       const rules = await rulesFingerprint(project.program);
       const rng = new Rng(state.seed);
       const base = opts.adapters?.(rng) ?? { ai: mockAi(rng), web: mockWeb(rng), chain: chainProvider() ? solanaChain() : mockChain() };
-      const { ai } = budgetedAi(base.ai, rng, caller, allowance, () => realCalls++);
+      const { ai } = budgetedAi(base.ai, rng, caller, allowance, () => {
+        realCalls++;
+        spentRun += opCost > 0 ? opCost : AI_COST_PER_CALL_USD; // test callers report no cost
+        opCost = 0;
+      });
       const adapters: Adapters = { ...base, ai };
 
       // Per-minute execution window.
@@ -233,7 +245,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
       meta.lastEventAt = sorted[sorted.length - 1].timestamp;
       meta.lastError = errors ? (state.runs.findLast((r) => r.id > firstReceipt && r.error)?.error ?? meta.lastError) : meta.lastError;
 
-      if (realCalls) await db.addAiUsage(projectId, day, realCalls, realCalls * AI_COST_PER_CALL_USD);
+      if (realCalls) await db.addAiUsage(projectId, day, realCalls, spentRun);
       if (!(await db.putState(projectId, state, meta, row?.version ?? 0))) continue; // someone else wrote: redo on fresh state
 
       await db.addReceipts(projectId, state.runs.filter((r) => r.id > firstReceipt));

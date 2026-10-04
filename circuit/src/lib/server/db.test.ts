@@ -154,7 +154,7 @@ else contract("postgres store", async () => {
   await db.listProjects({ limit: 1 }); // creates the schema
   const postgres = (await import("postgres")).default;
   const sql = postgres(pgUrl!, { onnotice: () => {} });
-  await sql`truncate circuit.projects, circuit.project_state, circuit.receipts, circuit.seen, circuit.ai_usage cascade`;
+  await sql`truncate circuit.projects, circuit.project_state, circuit.receipts, circuit.seen, circuit.ai_usage, circuit.batches cascade`;
   await sql.end();
   return db;
 });
