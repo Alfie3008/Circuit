@@ -18,7 +18,8 @@
 import { aiDailyCapUsd } from "@/lib/ai/spend";
 import { AI_COST_PER_CALL_USD, fuelOf } from "@/lib/fuel";
 import { rulesFingerprint } from "@/lib/proof/proof";
-import { chainProvider, getSolBalance } from "@/lib/chain/rpc";
+import { isAddress } from "@/lib/chain/parse";
+import { chainProvider, getSolBalance, getTokenBalance } from "@/lib/chain/rpc";
 import { aiConfigured, anthropicCaller, runtimeModel, type ModelCaller } from "@/lib/ai/model";
 import { runOp } from "@/lib/ai/runtime";
 import { mockAi, mockChain, mockWeb, type Adapters, type ChainAdapter } from "@/lib/runtime/adapters";
@@ -105,6 +106,8 @@ function withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
 const solanaChain = (): ChainAdapter => ({
   label: "solana",
   balance: (wallet) => getSolBalance(wallet).catch(() => null),
+  // Live coins only see real answers: a made-up wallet name is "can't read", not a guess.
+  tokenBalance: (wallet, mint) => (isAddress(wallet) && isAddress(mint) ? getTokenBalance(wallet, mint).catch(() => null) : Promise.resolve(null)),
 });
 
 /** Real AI while the budgets allow, mock answers after. Reports each finished op. */
@@ -204,7 +207,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
           try {
             for (const match of trigger(state, project.program, queue.shift()!, rng)) {
               if (++chain > MAX_CHAIN || window.runs >= limits.runsPerMinute) break;
-              const { receipt, run } = begin(state, match, { rng, adapters, now: clock, rules, raise: (e) => queue.push({ ...e, timestamp: clock() }) });
+              const { receipt, run } = begin(state, match, { rng, adapters, now: clock, rules, coin: project.setup.tokenAddress || undefined, raise: (e) => queue.push({ ...e, timestamp: clock() }) });
               open = receipt;
               let r = await run.next();
               while (!r.done) {

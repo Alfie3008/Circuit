@@ -150,8 +150,8 @@ const logic = category("logic", "core", [
     ir: "wallet_owns",
     module: "solana",
     shape: "boolean",
-    rows: [row("wallet", textIn("WALLET", "wallet"), "owns token", textIn("TOKEN", "mint"))],
-    tooltip: "True if the wallet holds a non-zero balance of the token (mock or live read).",
+    rows: [row("wallet", textIn("WALLET", "wallet"), "owns token", textIn("TOKEN", ""))],
+    tooltip: "True if the wallet holds any of the token. Leave the token empty for your own coin. Read from Solana when live; simulated in the builder for made-up wallets.",
   },
 ]);
 

@@ -92,6 +92,20 @@ export async function getSignatureStatus(signature: string, f?: Fetcher): Promis
   return r.value[0] ?? null;
 }
 
+/** How many of `mint` an owner holds (UI units), across all their token accounts for it. */
+export async function getTokenBalance(owner: string, mint: string, f?: Fetcher): Promise<number> {
+  const r = await rpc<{ value: { account: { data: { parsed?: { info?: { tokenAmount?: { uiAmountString?: string; uiAmount?: number | null } } } } } }[] }>(
+    "getTokenAccountsByOwner",
+    [owner, { mint }, { encoding: "jsonParsed", commitment: "confirmed" }],
+    f,
+  );
+  return r.value.reduce((sum, a) => {
+    const t = a.account.data.parsed?.info?.tokenAmount;
+    const n = Number(t?.uiAmountString ?? t?.uiAmount ?? 0);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
 export async function getSolBalance(address: string, f?: Fetcher): Promise<number> {
   const r = await rpc<{ value: number }>("getBalance", [address, { commitment: "confirmed" }], f);
   return r.value / 1e9;

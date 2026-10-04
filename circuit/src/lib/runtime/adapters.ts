@@ -53,6 +53,8 @@ export interface ChainAdapter {
   readonly label: string;
   /** SOL balance, or null if it can't be read. */
   balance(wallet: string): Promise<number | null>;
+  /** How many of a token (by mint) a wallet holds, or null if it can't be read. */
+  tokenBalance(wallet: string, mint: string): Promise<number | null>;
 }
 
 export interface Adapters {
@@ -69,6 +71,12 @@ export function mockChain(): ChainAdapter {
       let h = 0;
       for (let i = 0; i < wallet.length; i++) h = (h * 31 + wallet.charCodeAt(i)) >>> 0;
       return Math.round(h % 5000) / 100;
+    },
+    async tokenBalance(wallet, mint) {
+      // Simulated: about half of wallets hold any given token.
+      let h = 7;
+      for (const c of `${wallet}:${mint}`) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      return h % 2 === 0 ? (h % 100_000) + 1 : 0;
     },
   };
 }
@@ -305,6 +313,14 @@ export function guarded(a: Adapters, fallback: AiAdapter): Adapters {
       try {
         const b = await chain.balance(wallet);
         return typeof b === "number" && Number.isFinite(b) ? b : null;
+      } catch {
+        return null;
+      }
+    },
+    tokenBalance: async (wallet, mint) => {
+      try {
+        const b = await chain.tokenBalance(wallet, mint);
+        return typeof b === "number" && Number.isFinite(b) && b >= 0 ? b : null;
       } catch {
         return null;
       }

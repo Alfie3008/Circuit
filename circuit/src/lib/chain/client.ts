@@ -70,5 +70,19 @@ export function remoteChain(mock: ChainAdapter): ChainAdapter {
         return null;
       }
     },
+    async tokenBalance(wallet, mint) {
+      if (!isAddress(wallet) || !isAddress(mint)) {
+        label = "simulated (not a Solana address)";
+        return mock.tokenBalance(wallet, mint);
+      }
+      try {
+        const { tokens } = await getJson<{ tokens: number }>(`/api/chain/balance?${new URLSearchParams({ wallet, mint })}`);
+        label = "solana";
+        return tokens;
+      } catch (e) {
+        label = `unavailable (${e instanceof Error ? e.message : "error"})`;
+        return null;
+      }
+    },
   };
 }

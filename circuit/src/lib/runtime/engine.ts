@@ -28,7 +28,7 @@ export interface Begun {
 export function begin(
   state: RuntimeState,
   match: Match,
-  opts: { rng: Rng; adapters: Adapters; source?: string; now?: () => number; maxSteps?: number; raise?: RunContext["raise"]; rules?: string },
+  opts: { rng: Rng; adapters: Adapters; source?: string; now?: () => number; maxSteps?: number; raise?: RunContext["raise"]; rules?: string; coin?: string },
 ): Begun {
   const now = opts.now?.() ?? Date.now();
   state.executionCount += 1;
@@ -61,6 +61,7 @@ export function begin(
     now: opts.now,
     maxSteps: opts.maxSteps,
     raise: opts.raise,
+    coin: opts.coin,
   });
   return { receipt, run };
 }

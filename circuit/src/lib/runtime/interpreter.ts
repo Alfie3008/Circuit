@@ -60,6 +60,8 @@ export interface RunContext {
   now?: () => number;
   /** Events the program raises itself (an agent finishing a task). */
   raise?: (event: CircuitEvent) => void;
+  /** The project's own coin (mint address), when it has one. */
+  coin?: string;
 }
 
 export interface RunResult {
@@ -1002,9 +1004,16 @@ class Interpreter {
         return hit;
       }
       case "wallet_owns": {
-        const wallet = await this.text(node, "wallet");
-        const token = await this.text(node, "token");
-        return hash(`${wallet}:${token}`) % 2 === 0;
+        const wallet = (await this.text(node, "wallet")).trim();
+        const token = (await this.text(node, "token")).trim() || this.ctx.coin || "";
+        if (!wallet) this.fail("WALLET OWNS TOKEN needs a wallet, e.g. the event's wallet.");
+        if (!token) this.fail("WALLET OWNS TOKEN needs a token: this project has no coin yet, so put a token's address in.");
+        const chain = this.ctx.adapters.chain;
+        const held = await chain.tokenBalance(wallet, token);
+        const who = wallet.length > 12 ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : wallet;
+        if (held === null) this.fail(`Couldn't check on Solana whether ${who} holds that token right now, so this run stopped instead of guessing.`);
+        note(`${who} ${held > 0 ? `holds ${fmt(held)}` : "doesn't hold"} of the token`, [`Chain: ${chain.label}`]);
+        return held > 0;
       }
 
       // ---- Data ----

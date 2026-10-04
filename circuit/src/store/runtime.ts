@@ -162,9 +162,11 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => {
 
   const runMatch = async (match: Match, program: Program, rng: Rng) => {
     const adapters = makeAdapters(rng, get().aiStatus, get().chainStatus);
+    const setup = useProjectStore.getState().setup;
     const { receipt, run } = begin(working, match, {
       rng,
       adapters,
+      coin: setup.tokenAddress || undefined,
       raise: (event) => queue.push({ kind: "event", event, program }),
     });
     set({ errorBlockId: null });
