@@ -22,7 +22,8 @@ import { isAddress } from "@/lib/chain/parse";
 import { chainProvider, getSolBalance, getTokenBalance } from "@/lib/chain/rpc";
 import { aiConfigured, anthropicCaller, runtimeModel, type ModelCaller } from "@/lib/ai/model";
 import { runOp } from "@/lib/ai/runtime";
-import { mockAi, mockChain, mockWeb, type Adapters, type ChainAdapter } from "@/lib/runtime/adapters";
+import { mockAi, mockChain, type Adapters, type ChainAdapter } from "@/lib/runtime/adapters";
+import { liveWeb } from "./web";
 import { begin, finish, trigger } from "@/lib/runtime/engine";
 import type { CircuitEvent } from "@/lib/runtime/events";
 import { opAi } from "@/lib/runtime/remoteAi";
@@ -177,7 +178,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
 
       const rules = await rulesFingerprint(project.program);
       const rng = new Rng(state.seed);
-      const base = opts.adapters?.(rng) ?? { ai: mockAi(rng), web: mockWeb(rng), chain: chainProvider() ? solanaChain() : mockChain() };
+      const base = opts.adapters?.(rng) ?? { ai: mockAi(rng), web: liveWeb(rng), chain: chainProvider() ? solanaChain() : mockChain() };
       const { ai } = budgetedAi(base.ai, rng, caller, allowance, () => {
         realCalls++;
         spentRun += opCost > 0 ? opCost : AI_COST_PER_CALL_USD; // test callers report no cost

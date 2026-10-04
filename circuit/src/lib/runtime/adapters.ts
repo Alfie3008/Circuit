@@ -42,10 +42,20 @@ export interface Page {
   links: string[];
 }
 
+/** An HTTP answer as a program sees it: JSON bodies parsed, text otherwise. */
+export interface HttpResult {
+  status: number;
+  ok: boolean;
+  body: Value;
+  /** Not actually sent (the builder simulates sending). */
+  simulated?: boolean;
+}
+
 export interface WebAdapter {
   readonly label: string;
   search(query: string): Promise<SearchResult[]>;
   open(url: string): Promise<Page>;
+  request(method: string, url: string, headers: Record<string, string>, body: string | null): Promise<HttpResult>;
 }
 
 /** Read-only chain access for blocks like WALLET BALANCE. */
@@ -200,6 +210,9 @@ export function mockWeb(rng: Rng): WebAdapter {
     async open(url) {
       return page(url || `https://example.org/${slug(rng.pick(TOPICS)!)}`);
     },
+    async request() {
+      return { status: 200, ok: true, body: "", simulated: true };
+    },
   };
 }
 
@@ -208,6 +221,9 @@ export const mockAdapters = (rng: Rng): Adapters => ({ ai: mockAi(rng), web: moc
 // ---------------------------------------------------------------------------
 // Failsafe wrapper: every adapter answer is checked before a program sees it
 // ---------------------------------------------------------------------------
+
+/** Most web requests (pages opened, HTTP calls, webhooks) one run may make. */
+export const MAX_WEB_CALLS_PER_RUN = 10;
 
 /** A service a block needs didn't work. The run stops with this message. */
 export class ServiceError extends Error {}
@@ -280,7 +296,9 @@ export function guarded(a: Adapters, fallback: AiAdapter): Adapters {
   };
 
   const web = a.web;
+  let webCalls = 0;
   const webCall = async <T>(what: string, run: () => Promise<T>): Promise<T> => {
+    if (++webCalls > MAX_WEB_CALLS_PER_RUN) throw new ServiceError(`This run already made ${MAX_WEB_CALLS_PER_RUN} web requests, the most one run may make.`);
     try {
       return await run();
     } catch (e) {
@@ -301,6 +319,13 @@ export function guarded(a: Adapters, fallback: AiAdapter): Adapters {
         const p = (await web.open(url)) as unknown;
         if (!isPlain(p)) return { url, title: "", text: "", links: [] };
         return { url: textOr(p.url, url), title: textOr(p.title, ""), text: textOr(p.text, ""), links: Array.isArray(p.links) ? p.links.filter(isText) : [] };
+      }),
+    request: (method, url, headers, body) =>
+      webCall(`${method} ${url.length > 60 ? `${url.slice(0, 60)}…` : url}`, async () => {
+        const r = (await web.request(method, url, headers, body)) as unknown;
+        if (!isPlain(r)) return { status: 0, ok: false, body: null };
+        const status = Number(r.status);
+        return { status: Number.isFinite(status) ? status : 0, ok: r.ok === true, body: (r.body ?? null) as Value, ...(r.simulated ? { simulated: true } : {}) };
       }),
   };
 

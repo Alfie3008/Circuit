@@ -95,6 +95,15 @@ export function labelOf(node: IRNode): string {
 }
 
 const fmt = (n: number) => String(round(n, 4));
+/** "Authorization: Bearer x" lines (or "; "-separated) → a header map. */
+const parseHeaders = (text: string): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const line of text.split(/\n|;\s*(?=[\w-]+\s*:)/)) {
+    const i = line.indexOf(":");
+    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
+  return out;
+};
 /** Receipt text, shortened to the receipt limit. */
 const clip = (t: string) => (t.length > LIMITS.receiptText ? `${t.slice(0, LIMITS.receiptText)}… (${t.length.toLocaleString("en-US")} characters)` : t);
 const sol = (n: number, unit = "SOL") => `${fmt(n)} ${unit}`;
@@ -779,9 +788,14 @@ class Interpreter {
 
       // ---- Output (always simulated) ----
       case "send_webhook": {
-        const url = await this.text(node, "url");
+        const url = (await this.text(node, "url")).trim();
         const payload = await this.input(node, "payload");
-        this.log(`Webhook to ${url || "(no url)"}`, [`Payload ${this.display(payload)}`, "Not sent: outbound requests are simulated"], { simulated: true });
+        if (!url) this.fail("SEND WEBHOOK needs an address.");
+        const web = this.ctx.adapters.web;
+        const r = await web.request("POST", url, { "content-type": "application/json" }, JSON.stringify({ payload, sentAt: this.now() }));
+        if (r.simulated) this.log(`Webhook to ${url}`, [`Payload ${this.display(payload)}`, `Web: ${web.label}`], { simulated: true });
+        else if (!r.ok) this.fail(`The webhook at ${url} answered ${r.status}.`);
+        else this.log(`Webhook sent to ${url} (${r.status})`, [`Payload ${this.display(payload)}`]);
         return;
       }
       case "post_message": {
@@ -1156,10 +1170,16 @@ class Interpreter {
         return { ...next };
       }
       case "http_request": {
-        const url = await this.text(node, "url");
-        const method = String(node.method);
-        note(`${method} ${url || "(no url)"}`, ["Not sent: HTTP is off in the prototype"], { simulated: true });
-        return { status: 200, simulated: true, body: "" };
+        const url = (await this.text(node, "url")).trim();
+        const method = String(node.method || "GET").toUpperCase();
+        if (!url) this.fail("The HTTP block needs an address.");
+        const headers = parseHeaders(this.field(node, "headers"));
+        const bodyVal = method === "GET" ? null : await this.input(node, "body");
+        const body = bodyVal === null || bodyVal === "" ? null : typeof bodyVal === "string" ? bodyVal : JSON.stringify(bodyVal);
+        if (body && typeof bodyVal !== "string" && !Object.keys(headers).some((h) => h.toLowerCase() === "content-type")) headers["content-type"] = "application/json";
+        const r = await web.request(method, url, headers, body);
+        note(`${method} ${url} → ${r.simulated ? "not sent" : r.status}`, [`Web: ${web.label}`], r.simulated ? { simulated: true } : {});
+        return { status: r.status, ok: r.ok, body: r.body, ...(r.simulated ? { simulated: true } : {}) };
       }
 
       // ---- Media ----

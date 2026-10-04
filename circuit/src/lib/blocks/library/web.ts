@@ -66,7 +66,7 @@ const web = category("web", "browser", [
       row("headers", text("HEADERS", "")),
       row("body", anyIn("BODY", "")),
     ],
-    tooltip: "Only GET requests to allowlisted hosts execute, and only when enabled. Other methods are simulated.",
+    tooltip: "Calls a web address and gives back { status, ok, body } (JSON bodies are read for you). Headers as \"Name: value\" lines. Public addresses only, at most 10 web calls per run. In the builder only GET is sent; other methods are sent once your coin is live.",
   },
 ]);
 

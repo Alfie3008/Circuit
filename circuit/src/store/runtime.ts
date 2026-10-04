@@ -11,7 +11,7 @@
 import { create } from "zustand";
 import type { Program } from "@/lib/ir";
 import { fetchAiStatus, type AiStatus } from "@/lib/ai/client";
-import { fetchChainStatus, remoteChain, type ChainStatus } from "@/lib/chain/client";
+import { fetchChainStatus, remoteChain, remoteWeb, type ChainStatus } from "@/lib/chain/client";
 import { mockAdapters, mockAi, mockChain, mockWeb, type Adapters } from "@/lib/runtime/adapters";
 import { remoteAi } from "@/lib/runtime/remoteAi";
 import { begin, finish, trigger } from "@/lib/runtime/engine";
@@ -111,7 +111,7 @@ function makeAdapters(rng: Rng, ai: AiStatus | null, chain: ChainStatus | null):
           useProjectStore.getState().notify("error", `AI block used a mock answer: ${reason}`);
         })
       : base.ai,
-    web: mockWeb(rng),
+    web: remoteWeb(mockWeb(rng)),
     chain: chain?.enabled ? remoteChain(mockChain()) : base.chain,
   };
 }

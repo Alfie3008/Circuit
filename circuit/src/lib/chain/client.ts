@@ -3,7 +3,7 @@
  * adapter used by blocks like WALLET BALANCE.
  */
 import { errorText, guardedGet } from "@/lib/ai/client";
-import type { ChainAdapter } from "@/lib/runtime/adapters";
+import type { ChainAdapter, HttpResult, Page, WebAdapter } from "@/lib/runtime/adapters";
 import type { CircuitEvent } from "@/lib/runtime/events";
 import { isAddress } from "./parse";
 
@@ -44,6 +44,36 @@ export function pollChain(opts: { mint: string; wallet?: string; until?: string 
 
 export function fetchHolders(mint: string) {
   return getJson<{ holders: number; capped: boolean }>(`/api/chain/holders?${new URLSearchParams({ mint })}`);
+}
+
+/**
+ * The web in the builder: pages and GET requests are real (read through the
+ * server's safe fetcher); sending (POST, webhooks) is simulated so testing a
+ * program never spams anyone; search is simulated until a search API is set.
+ */
+export function remoteWeb(mock: WebAdapter): WebAdapter {
+  let label = "web";
+  return {
+    get label() {
+      return label;
+    },
+    async search(query) {
+      label = "simulated search (no search API connected yet)";
+      return mock.search(query);
+    },
+    async open(url) {
+      label = "web";
+      return getJson<Page>(`/api/web/open?${new URLSearchParams({ url })}`);
+    },
+    async request(method, url, headers, body) {
+      if (method.toUpperCase() !== "GET") {
+        label = "simulated in the builder (sent for real once your coin is live)";
+        return mock.request(method, url, headers, body);
+      }
+      label = "web";
+      return getJson<HttpResult>(`/api/web/get?${new URLSearchParams({ url, headers: JSON.stringify(headers) })}`);
+    },
+  };
 }
 
 /**

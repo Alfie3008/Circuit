@@ -238,9 +238,8 @@ const output = category("output", "social", [
     type: "output_webhook",
     ir: "send_webhook",
     shape: "statement",
-    simulated: true,
     rows: [row("send webhook to", textIn("URL", "https://example.com/hook")), row("payload", anyIn("PAYLOAD", ""))],
-    tooltip: "SIMULATED by default. Records the request it would send.",
+    tooltip: "POSTs the payload as JSON to a web address. Sent for real once your coin is live; simulated in the builder.",
   },
   {
     type: "output_post",
