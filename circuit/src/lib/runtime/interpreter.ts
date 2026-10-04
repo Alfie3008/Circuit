@@ -13,7 +13,6 @@ import { guarded, mockAi, ServiceError, type Adapters } from "./adapters";
 import type { CircuitEvent } from "./events";
 import { listField } from "./events";
 import type { Rng } from "./rng";
-import { hash } from "./rng";
 import { LIMITS, type Agent, type Bounty, type Entity, type Receipt, type ReceiptEntry, type RunStatus, type RuntimeState, type Submission } from "./state";
 import {
   clone,
