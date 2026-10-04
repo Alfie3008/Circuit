@@ -146,6 +146,26 @@ const reporters = category("events", "core", [
     rows: [row("event", dropdown("FIELD", EVENT_FIELDS.map((f) => [f, f] as [string, string])))],
     tooltip: "A value from the event that started this script. Fields the event doesn't provide are empty.",
   },
+  {
+    type: "events_coin_stat",
+    ir: "coin_stat",
+    module: "solana",
+    shape: "reporter",
+    output: ["Number"],
+    rows: [
+      row(
+        "coin",
+        dropdown("STAT", [
+          ["market cap (USD)", "market_cap"],
+          ["holders", "holders"],
+          ["price (SOL)", "price"],
+          ["volume (SOL)", "volume"],
+          ["trades", "trades"],
+        ]),
+      ),
+    ],
+    tooltip: "Your coin's numbers right now: market cap in USD, holder count, price per token in SOL, and volume and trades since launch. Simulated in the builder; real once the coin is live.",
+  },
 ]);
 
 export const EVENT_BLOCKS: BlockSpec[] = [...hats, ...reporters];

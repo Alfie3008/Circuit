@@ -2,13 +2,16 @@
  * One cron tick (about once a minute): for every live project, fire due
  * timers and poll the chain if it's time, then run what came in.
  */
-import { chainProvider, pool } from "@/lib/chain/rpc";
+import { chainProvider, holderCount, pool } from "@/lib/chain/rpc";
 import type { CircuitEvent } from "@/lib/runtime/events";
 import { intake, pollProject, watchedAddresses } from "./chainFeed";
 import { webhooksConfigured } from "./helius";
 import { runProject, type RunOptions, type RunSummary } from "./runner";
 import { timerEvents } from "./schedule";
 import { emptyMeta, type Db, type RunMeta } from "./types";
+
+/** How often a live coin's holder count is read (it costs several RPC credits for big coins). */
+const HOLDERS_EVERY_MS = 10 * 60_000;
 
 /** Stop starting new projects after this long (the function's limit is 60 s). */
 const TICK_BUDGET_MS = 45_000;
@@ -39,8 +42,15 @@ export async function tick(db: Db, opts: RunOptions & { poll?: boolean } = {}): 
     let chain: CircuitEvent[] = [];
     let cursor: RunMeta["cursor"] | null = null;
     let pollError: string | null = null;
+    let holders: number | null = null;
     if (canPoll && watchedAddresses(p).length) {
       const meta = { ...emptyMeta(), ...((await db.getState(p.id))?.meta ?? {}) };
+      // Holder count: only Helius can count holders; read every few minutes.
+      if (chainProvider() === "helius" && p.setup.tokenAddress && (!meta.holdersAt || started - meta.holdersAt >= HOLDERS_EVERY_MS - 5_000)) {
+        holders = await holderCount(p.setup.tokenAddress)
+          .then((h) => h.holders)
+          .catch(() => null);
+      }
       if (!meta.lastPollAt || started - meta.lastPollAt >= pollEveryMs) {
         try {
           const r = await pollProject(p, meta);
@@ -61,7 +71,16 @@ export async function tick(db: Db, opts: RunOptions & { poll?: boolean } = {}): 
             ctx.meta.lastPollAt = started;
           }
           if (pollError) ctx.meta.lastError = `Reading the chain failed: ${pollError}`;
-          return [...timerEvents(ctx.project.program, ctx.meta, ctx.now, ctx.project.timezone), ...chain];
+          const events = [...timerEvents(ctx.project.program, ctx.meta, ctx.now, ctx.project.timezone), ...chain];
+          if (holders !== null) {
+            const from = ctx.state.market.holders;
+            // The first reading just sets the number (no crossing from zero); later changes are events.
+            if (!ctx.meta.holdersAt) ctx.state.market.holders = holders;
+            // First in the tick, so scripts running now see the new number.
+            else if (holders !== from) events.unshift({ type: "holders", source: "live", timestamp: ctx.now, data: { from, to: holders } });
+            ctx.meta.holdersAt = ctx.now;
+          }
+          return events;
         },
         opts,
       );

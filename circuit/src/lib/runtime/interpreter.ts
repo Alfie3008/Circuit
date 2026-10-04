@@ -929,6 +929,21 @@ class Interpreter {
     const note = (text: string, details: string[] = [], opts: Partial<ReceiptEntry> = {}) => this.log(text, details, opts, { ...node, id: node.id ?? at?.id });
 
     switch (node.type) {
+      case "coin_stat": {
+        const m = s.market;
+        switch (node.stat) {
+          case "holders":
+            return m.holders;
+          case "price":
+            return m.priceSol ?? m.marketCap / 1e9 / 170;
+          case "volume":
+            return round(m.totalVolume, 4);
+          case "trades":
+            return m.trades;
+          default:
+            return m.marketCap;
+        }
+      }
       case "event_field": {
         const v = this.ctx.payload[String(node.field)];
         return v === undefined ? null : clone(v);

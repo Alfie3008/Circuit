@@ -195,6 +195,9 @@ export function applyEvent(state: RuntimeState, event: CircuitEvent, rng: Rng): 
       m.trades += 1;
       if (typeof d.marketCap === "number") m.marketCap = d.marketCap; // live: priced from the trade
       else m.marketCap = Math.max(1000, Math.round(m.marketCap + (d.side === "sell" ? -1 : 1) * amount * 900));
+      // Price per token: from the trade itself when live; in the simulator, from market cap (1B supply, SOL at ~$170).
+      const tokens = toNumber(d.tokenAmount);
+      m.priceSol = tokens > 0 && amount > 0 ? amount / tokens : m.marketCap / 1e9 / 170;
       if (event.source === "simulator" && d.side === "buy" && rng.next() < 0.5) m.holders += 1;
       break;
     }

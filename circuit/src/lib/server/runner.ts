@@ -48,6 +48,13 @@ const MAX_WAIT_S = 10;
 
 export const today = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
+/** A new world on the server: like the builder's, but the coin's numbers start at zero, not the simulator's samples. */
+export function serverInitialState(projectId: string): RuntimeState {
+  const s = initialState(hash(projectId) % 2147483647);
+  s.market = { totalVolume: 0, marketCap: 0, holders: 0, trades: 0, ticks: 0 };
+  return s;
+}
+
 export interface RunContext {
   project: ServerProject;
   state: RuntimeState;
@@ -132,7 +139,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
       if (!project.live) return { ...summary, skipped: "not live" };
 
       const row = await db.getState(projectId);
-      const state = row?.state ?? initialState(hash(projectId) % 2147483647);
+      const state = row?.state ?? serverInitialState(projectId);
       const meta: RunMeta = { ...emptyMeta(), ...(row?.meta ?? {}) };
       const ctx: RunContext = { project, state, meta, now: started };
       const metaBefore = JSON.stringify(meta);
@@ -231,7 +238,7 @@ export async function runProject(db: Db, projectId: string, plan: Planner | Circ
       // Last-resort failsafe: never save a world too big to load again. Keep the last good one.
       if (sizeOf(state, LIMITS.worldChars) > LIMITS.worldChars) {
         // `state` was changed in place, so read the stored (last good) copy again.
-        const kept = (await db.getState(projectId))?.state ?? initialState(hash(projectId) % 2147483647);
+        const kept = (await db.getState(projectId))?.state ?? serverInitialState(projectId);
         const note = `These runs made the world too big to save (over ${(LIMITS.worldChars / 1e6).toFixed(0)} MB), so their changes were undone. Remove agents, entities or long lists, or reset the world.`;
         const fresh = state.runs.filter((r) => r.id > firstReceipt);
         for (const r of fresh) r.entries.push({ op: "ERROR", text: note, details: [], status: "error" });

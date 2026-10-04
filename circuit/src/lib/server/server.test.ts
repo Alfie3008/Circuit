@@ -189,6 +189,50 @@ describe("server failsafes", () => {
   });
 });
 
+describe("live coin stats", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("reads the holder count every 10 minutes: the first reading sets it, later changes fire crossings", async () => {
+    vi.stubEnv("HELIUS_API_KEY", "test");
+    const mint = "MintAddress1111111111111111111111111111111";
+    let owners = 40;
+    let holderReads = 0;
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      const { method } = JSON.parse(String(init?.body ?? "{}"));
+      const result =
+        method === "getTokenAccounts"
+          ? (holderReads++, { token_accounts: Array.from({ length: owners }, (_, i) => ({ owner: `o${i}`, amount: 1 })) })
+          : method === "getSignaturesForAddress"
+            ? []
+            : null;
+      return Response.json({ jsonrpc: "2.0", id: 1, result });
+    });
+    const db = memoryDb();
+    const prog = program({
+      version: 1,
+      scripts: [
+        { event: { type: "holder_count_crosses", direction: "above", threshold: 50 }, body: [{ type: "update_feed", message: "50 holders!" }] },
+        { event: { type: "every_minutes", minutes: 10 }, body: [{ type: "set_var", var: "h", value: { type: "coin_stat", stat: "holders" } }] },
+      ],
+    });
+    await publish(db, "coin", prog, { setup: { ...DEFAULT_SETUP, launchMode: "existing", tokenAddress: mint } });
+
+    await tick(db, { now: () => T0, poll: true });
+    expect((await db.getState("coin"))!.state.market.holders).toBe(40); // set, no crossing from zero
+    owners = 55;
+    await tick(db, { now: () => T0 + 60_000, poll: true }); // too soon to read again
+    expect(holderReads).toBe(1);
+    await tick(db, { now: () => T0 + 10 * 60_000, poll: true });
+    const { state } = (await db.getState("coin"))!;
+    expect(state.market.holders).toBe(55);
+    expect(state.feed.map((f) => f.text)).toContain("50 holders!");
+    expect(state.variables.h).toBe(55); // the coin stat block reads the live number
+  });
+});
+
 describe("AI fuel intake", () => {
   afterEach(() => vi.unstubAllGlobals());
 

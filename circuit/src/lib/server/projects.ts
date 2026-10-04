@@ -6,10 +6,9 @@ import { z } from "zod";
 import { parseProgram, plainIssues } from "@/lib/ir";
 import { readSetup } from "@/lib/project/storage";
 import { isAddress } from "@/lib/chain/parse";
-import { initialState } from "@/lib/runtime/state";
-import { hash } from "@/lib/runtime/rng";
 import { invalidateLive } from "./chainFeed";
 import { syncWebhook, type SyncResult } from "./helius";
+import { serverInitialState } from "./runner";
 import { checkCreator, type CreatorLookup } from "./proofs";
 import { emptyMeta, ServerError, type Db, type ServerProject } from "./types";
 
@@ -129,7 +128,7 @@ export async function updateSettings(db: Db, owner: string, id: string, input: u
     // starts from the current transaction (no replay of old activity).
     for (let attempt = 0; attempt < 3; attempt++) {
       const row = await db.getState(id);
-      const state = row?.state ?? initialState(hash(id) % 2147483647);
+      const state = row?.state ?? serverInitialState(id);
       const meta = { ...emptyMeta(), ...(row?.meta ?? {}), liveSince: project.live ? now : null, lastTick: {}, cursor: {}, lastPollAt: undefined };
       if (await db.putState(id, state, meta, row?.version ?? 0)) break;
     }

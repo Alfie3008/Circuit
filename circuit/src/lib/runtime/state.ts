@@ -106,7 +106,7 @@ export interface RuntimeState {
   budgets: Record<string, number>;
   portfolio: Record<string, number>;
   bounties: Bounty[];
-  market: { totalVolume: number; marketCap: number; holders: number; trades: number; ticks: number };
+  market: { totalVolume: number; marketCap: number; holders: number; trades: number; ticks: number; /** Last trade price, SOL per token. */ priceSol?: number };
   cooldowns: Record<string, number>;
   runs: Receipt[];
 }
@@ -203,7 +203,7 @@ const StateSchema = z.object({
   portfolio: loose(z.record(z.string(), z.number()), {}),
   bounties: loose(z.array(z.any()), []),
   market: loose(
-    z.object({ totalVolume: z.number(), marketCap: z.number(), holders: z.number(), trades: z.number(), ticks: z.number() }),
+    z.object({ totalVolume: z.number(), marketCap: z.number(), holders: z.number(), trades: z.number(), ticks: z.number(), priceSol: z.number().optional() }),
     base.market,
   ),
   cooldowns: loose(z.record(z.string(), z.number()), {}),

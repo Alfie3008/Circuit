@@ -72,6 +72,8 @@ export interface RunMeta {
   /** Newest chain signatures already handled, for polling. */
   cursor: { mint?: string; wallet?: string };
   lastPollAt?: number;
+  /** When the coin's holder count was last read from Solana. */
+  holdersAt?: number;
   liveSince: number | null;
   lastEventAt: number | null;
   lastError: string | null;
